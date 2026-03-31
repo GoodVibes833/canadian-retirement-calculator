@@ -94,6 +94,8 @@ export interface LockedInAccountPolicy {
 export interface TaxableAccountTaxProfile {
   nonRegisteredAdjustedCostBase?: number;
   annualInterestIncome?: number;
+  annualEligibleDividendIncome?: number;
+  annualNonEligibleDividendIncome?: number;
   notes?: string;
 }
 

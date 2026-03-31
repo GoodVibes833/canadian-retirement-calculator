@@ -67,6 +67,9 @@ interface MemberFrame {
   annuityIncome: number;
   rentalIncome: number;
   foreignPensionIncome: number;
+  taxableInterestIncome: number;
+  eligibleDividendIncome: number;
+  nonEligibleDividendIncome: number;
   otherPlannedIncome: number;
 }
 
@@ -81,6 +84,8 @@ interface MemberTaxState {
   eligiblePensionIncome: number;
   pensionIncomeSplitIn: number;
   pensionIncomeSplitOut: number;
+  eligibleDividendIncome: number;
+  nonEligibleDividendIncome: number;
   realizedCapitalGains: number;
   taxableCapitalGains: number;
   warnings: string[];
@@ -460,6 +465,11 @@ function buildMemberFrames(
         member.foreignPensionIncome,
         age,
       ),
+      taxableInterestIncome: member.taxableAccountTaxProfile?.annualInterestIncome ?? 0,
+      eligibleDividendIncome:
+        member.taxableAccountTaxProfile?.annualEligibleDividendIncome ?? 0,
+      nonEligibleDividendIncome:
+        member.taxableAccountTaxProfile?.annualNonEligibleDividendIncome ?? 0,
       otherPlannedIncome: estimateOtherPlannedIncome(member, age, isAlive),
     };
   });
@@ -763,7 +773,8 @@ function buildBaseTaxState(
         frame.cppQppIncome +
         frame.oasIncome +
         frame.dbPensionIncome +
-        frame.otherPlannedIncome +
+        resolveBaseOrdinaryPlannedIncome(frame) +
+        resolveTaxableDividendIncome(frame) +
         lifShare +
         rrifShare -
         frame.rrspContribution,
@@ -784,6 +795,8 @@ function buildBaseTaxState(
       ),
       pensionIncomeSplitIn: 0,
       pensionIncomeSplitOut: 0,
+      eligibleDividendIncome: frame.eligibleDividendIncome,
+      nonEligibleDividendIncome: frame.nonEligibleDividendIncome,
       realizedCapitalGains: 0,
       taxableCapitalGains: 0,
       warnings: [],
@@ -833,6 +846,8 @@ function finalizeMemberTaxState(
       calendarYear,
       age: memberState.age,
       eligiblePensionIncome: memberState.eligiblePensionIncome,
+      eligibleDividendIncome: memberState.eligibleDividendIncome,
+      nonEligibleDividendIncome: memberState.nonEligibleDividendIncome,
     });
 
     memberState.taxes = taxEstimate.totalTax;
@@ -1121,6 +1136,8 @@ function executeDrawdown(
           calendarYear: period.calendarYear,
           age: taxState.age,
           eligiblePensionIncome: taxState.eligiblePensionIncome,
+          eligibleDividendIncome: taxState.eligibleDividendIncome,
+          nonEligibleDividendIncome: taxState.nonEligibleDividendIncome,
         });
 
         taxState.taxes = updatedTaxEstimate.totalTax;
@@ -1213,6 +1230,8 @@ function executeDrawdown(
           calendarYear: period.calendarYear,
           age: taxState.age,
           eligiblePensionIncome: taxState.eligiblePensionIncome,
+          eligibleDividendIncome: taxState.eligibleDividendIncome,
+          nonEligibleDividendIncome: taxState.nonEligibleDividendIncome,
         });
 
         taxState.taxes = updatedTaxEstimate.totalTax;
@@ -1276,6 +1295,8 @@ function executeDrawdown(
           calendarYear: period.calendarYear,
           age: taxState.age,
           eligiblePensionIncome: taxState.eligiblePensionIncome,
+          eligibleDividendIncome: taxState.eligibleDividendIncome,
+          nonEligibleDividendIncome: taxState.nonEligibleDividendIncome,
         });
 
         taxState.taxes = updatedTaxEstimate.totalTax;
@@ -1692,7 +1713,25 @@ function estimateOtherPlannedIncome(
     estimateScheduledCashFlowTotal(member.annuityIncome, age) +
     estimateScheduledCashFlowTotal(member.rentalIncome, age) +
     estimateScheduledCashFlowTotal(member.foreignPensionIncome, age) +
-    (member.taxableAccountTaxProfile?.annualInterestIncome ?? 0)
+    (member.taxableAccountTaxProfile?.annualInterestIncome ?? 0) +
+    (member.taxableAccountTaxProfile?.annualEligibleDividendIncome ?? 0) +
+    (member.taxableAccountTaxProfile?.annualNonEligibleDividendIncome ?? 0)
+  );
+}
+
+function resolveBaseOrdinaryPlannedIncome(frame: MemberFrame): number {
+  return Math.max(
+    0,
+    frame.otherPlannedIncome -
+      frame.eligibleDividendIncome -
+      frame.nonEligibleDividendIncome,
+  );
+}
+
+function resolveTaxableDividendIncome(frame: MemberFrame): number {
+  return (
+    frame.eligibleDividendIncome * 1.38 +
+    frame.nonEligibleDividendIncome * 1.15
   );
 }
 
@@ -1838,6 +1877,8 @@ function estimateNetFromRegisteredWithdrawal(
     calendarYear,
     age: taxState.age,
     eligiblePensionIncome: updatedEligiblePensionIncome,
+    eligibleDividendIncome: taxState.eligibleDividendIncome,
+    nonEligibleDividendIncome: taxState.nonEligibleDividendIncome,
   }).totalTax;
   const updatedOasRecovery = estimateOasRecoveryTax(
     context,
@@ -1919,6 +1960,8 @@ function estimateNetFromNonRegisteredWithdrawal(
     calendarYear,
     age: taxState.age,
     eligiblePensionIncome: taxState.eligiblePensionIncome,
+    eligibleDividendIncome: taxState.eligibleDividendIncome,
+    nonEligibleDividendIncome: taxState.nonEligibleDividendIncome,
   }).totalTax;
   const updatedOasRecovery = estimateOasRecoveryTax(
     context,
@@ -2275,6 +2318,18 @@ function buildYearWarnings(
         "Taxable-account interest income is being modeled as an explicit annual cash distribution. Make sure the portfolio return assumption excludes the same yield to avoid double counting.",
       );
     }
+
+    if (
+      (frame.member.taxableAccountTaxProfile?.annualEligibleDividendIncome ?? 0) > 0 ||
+      (frame.member.taxableAccountTaxProfile?.annualNonEligibleDividendIncome ?? 0) > 0
+    ) {
+      warnings.push(
+        "Taxable Canadian dividend income is now modeled with gross-up and dividend tax credits. Confirm the entered amount is the actual cash dividend, not the taxable slip amount.",
+      );
+      warnings.push(
+        "Dividend-character support currently covers Canadian eligible and non-eligible dividends only. Foreign dividends and return-of-capital cases should stay in separate income assumptions for now.",
+      );
+    }
   }
 
   return warnings;
@@ -2314,7 +2369,7 @@ function buildAssumptionList(context: NormalizedContext): string[] {
     "OAS recovery tax is estimated with prior-year threshold mapping and capped by modeled OAS income.",
     "Drawdown currently supports a practical blended heuristic, not full optimization.",
     "Locked-in accounts now support baseline LIRA-to-LIF conversion, RRIF-style minimums, and jurisdiction-aware fallback maximums, with manual annual overrides preferred when available.",
-    "Non-registered withdrawals now track adjusted cost base and realize taxable capital gains using the baseline Canadian inclusion rate, while explicit taxable-account interest can be modeled as annual cash income. Dividend character and capital-loss carryforward handling remain incomplete.",
+    "Non-registered withdrawals now track adjusted cost base and realize taxable capital gains using the baseline Canadian inclusion rate, while explicit taxable-account interest and Canadian eligible / non-eligible dividends can be modeled as annual cash income. Return of capital, foreign dividends, and capital-loss carryforward handling remain incomplete.",
     "Pension splitting currently uses an annual household heuristic on planned eligible pension income before discretionary registered drawdown.",
     "Immigrant and partial-benefit support is modeled through statement, manual, residence-year, and foreign-pension inputs.",
   ];

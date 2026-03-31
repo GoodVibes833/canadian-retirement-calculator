@@ -488,6 +488,88 @@ const taxChecks = [
       );
     },
   },
+  {
+    id: "T13",
+    label: "Ontario eligible dividends are taxed more favourably than equal cash interest",
+    check() {
+      const baseOrdinaryIncome = 60000;
+      const dividendCash = 10000;
+      const interestScenario = estimateIncomeTax({
+        taxableIncome: baseOrdinaryIncome + dividendCash,
+        province: "ON",
+        calendarYear: 2026,
+        age: 65,
+      });
+      const nonEligibleDividendScenario = estimateIncomeTax({
+        taxableIncome: baseOrdinaryIncome + dividendCash * 1.15,
+        province: "ON",
+        calendarYear: 2026,
+        age: 65,
+        nonEligibleDividendIncome: dividendCash,
+      });
+      const eligibleDividendScenario = estimateIncomeTax({
+        taxableIncome: baseOrdinaryIncome + dividendCash * 1.38,
+        province: "ON",
+        calendarYear: 2026,
+        age: 65,
+        eligibleDividendIncome: dividendCash,
+      });
+
+      assert(
+        eligibleDividendScenario.totalTax < interestScenario.totalTax,
+        "Eligible dividends should be taxed more favourably than equal cash interest in Ontario.",
+      );
+      assert(
+        nonEligibleDividendScenario.totalTax < interestScenario.totalTax,
+        "Non-eligible dividends should still be taxed more favourably than equal cash interest in Ontario.",
+      );
+      assert(
+        eligibleDividendScenario.totalTax < nonEligibleDividendScenario.totalTax,
+        "Eligible dividends should stay more tax-efficient than non-eligible dividends for the same cash amount.",
+      );
+    },
+  },
+  {
+    id: "T14",
+    label: "Eligible dividend income reduces drawdown need and surfaces dividend warnings",
+    check() {
+      const baseInput = readJson(
+        "data/fixtures/taxable-account/on-taxable-missing-acb.json",
+      );
+      const dividendInput = readJson(
+        "data/fixtures/taxable-account/on-taxable-missing-acb.json",
+      );
+      dividendInput.household.primary.definedBenefitPension = {
+        annualAmount: 25000,
+        startAge: 65,
+        indexationRate: 0,
+      };
+      dividendInput.household.primary.taxableAccountTaxProfile = {
+        annualEligibleDividendIncome: 15000,
+      };
+      dividendInput.household.expenseProfile.desiredAfterTaxSpending = 35000;
+
+      const baseResult = simulateRetirementPlan(baseInput, rules);
+      const dividendResult = simulateRetirementPlan(dividendInput, rules);
+      const baseYear = baseResult.years[0];
+      const dividendYear = dividendResult.years[0];
+
+      assert(
+        dividendYear.otherPlannedIncome >= 15000,
+        "Eligible dividend cash income should appear in other planned income.",
+      );
+      assert(
+        dividendYear.taxableWithdrawals < baseYear.taxableWithdrawals,
+        "Eligible dividend income should reduce the need for taxable-account withdrawals.",
+      );
+      assert(
+        dividendYear.warnings.some((warning) =>
+          warning.includes("actual cash dividend"),
+        ),
+        "Dividend-income scenario should remind users to enter actual cash dividends, not grossed-up slip amounts.",
+      );
+    },
+  },
 ];
 
 for (const check of taxChecks) {
