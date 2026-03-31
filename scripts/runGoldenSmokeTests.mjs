@@ -1317,6 +1317,88 @@ const taxChecks = [
       );
     },
   },
+  {
+    id: "T39",
+    label: "Couple timeline reaches the youngest spouse's remaining lifetime",
+    check() {
+      const input = readJson("data/fixtures/golden/golden-on-couple-core.json");
+      const result = simulateRetirementPlan(input, rules);
+      const lastYear = result.years.at(-1);
+
+      assert(lastYear, "Couple projection should have a last year.");
+      assert(
+        lastYear.primaryAge === 96,
+        "Couple projection should continue until the younger spouse's remaining lifetime is exhausted, even when that pushes the primary member past their own life expectancy age.",
+      );
+      assert(
+        lastYear.partnerAge === 94,
+        "Couple projection should reach the younger spouse's modeled life expectancy age.",
+      );
+    },
+  },
+  {
+    id: "T40",
+    label: "Summary estate proxy reports terminal tax and Ontario estate administration cost",
+    check() {
+      const input = readJson("data/fixtures/golden/golden-on-single-saver.json");
+      input.household.primary.profile.currentAge = 65;
+      input.household.primary.profile.retirementAge = 65;
+      input.household.primary.profile.lifeExpectancy = 65;
+      input.household.maxProjectionAge = 65;
+      input.household.primary.employment.baseAnnualIncome = 0;
+      input.household.primary.employment.bonusAnnualIncome = 0;
+      input.household.primary.accounts.rrsp = 250000;
+      input.household.primary.accounts.rrif = 0;
+      input.household.primary.accounts.tfsa = 120000;
+      input.household.primary.accounts.nonRegistered = 90000;
+      input.household.primary.accounts.cash = 40000;
+      input.household.primary.taxableAccountTaxProfile = {
+        ...(input.household.primary.taxableAccountTaxProfile ?? {}),
+        nonRegisteredAdjustedCostBase: 60000,
+        annualInterestIncome: 0,
+        annualEligibleDividendIncome: 0,
+        annualNonEligibleDividendIncome: 0,
+        annualForeignDividendIncome: 0,
+        annualForeignNonBusinessIncomeTaxPaid: 0,
+        annualReturnOfCapitalDistribution: 0,
+      };
+      input.household.expenseProfile.desiredAfterTaxSpending = 0;
+      input.household.expenseProfile.housing = 0;
+      input.household.expenseProfile.utilities = 0;
+      input.household.expenseProfile.food = 0;
+      input.household.expenseProfile.transportation = 0;
+      input.household.expenseProfile.healthcare = 0;
+      input.household.expenseProfile.insurance = 0;
+      input.household.expenseProfile.travelAndRecreation = 0;
+      input.household.expenseProfile.debtPayments = 0;
+      input.household.primary.contributions.rrsp = 0;
+      input.household.primary.contributions.tfsa = 0;
+      input.household.primary.contributions.nonRegistered = 0;
+      input.household.primary.annuityIncome = [];
+      input.household.primary.rentalIncome = [];
+      input.household.primary.foreignPensionIncome = [];
+
+      const result = simulateRetirementPlan(input, rules);
+
+      assert(
+        (result.summary.estimatedEstateValue ?? 0) > 0,
+        "Estate proxy scenario should report a positive gross estate value.",
+      );
+      assert(
+        (result.summary.estimatedTerminalTaxLiability ?? 0) > 0,
+        "Estate proxy scenario should report positive terminal tax when registered assets remain.",
+      );
+      assert(
+        (result.summary.estimatedProbateAndEstateAdminCost ?? 0) > 0,
+        "Ontario estate proxy scenario should report a positive estate administration cost.",
+      );
+      assert(
+        (result.summary.estimatedAfterTaxEstateValue ?? 0) <
+          (result.summary.estimatedEstateValue ?? 0),
+        "After-tax estate value should be below the gross estate value when terminal tax and estate administration cost apply.",
+      );
+    },
+  },
 ];
 
 for (const check of taxChecks) {

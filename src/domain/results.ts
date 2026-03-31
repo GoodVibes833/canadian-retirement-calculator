@@ -43,6 +43,9 @@ export interface SimulationSummary {
   firstShortfallYear?: number;
   lastProjectionYear: number;
   estimatedEstateValue?: number;
+  estimatedAfterTaxEstateValue?: number;
+  estimatedTerminalTaxLiability?: number;
+  estimatedProbateAndEstateAdminCost?: number;
   notableWarnings: string[];
 }
 

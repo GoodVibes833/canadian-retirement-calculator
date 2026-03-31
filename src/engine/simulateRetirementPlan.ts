@@ -154,6 +154,14 @@ interface SingleYearProjection {
   nextTaxAttributes: HouseholdTaxAttributeLedger;
 }
 
+interface TerminalEstateEstimate {
+  grossEstateValue: number;
+  afterTaxEstateValue: number;
+  terminalTaxLiability: number;
+  probateOrEstateAdminCost?: number;
+  warnings: string[];
+}
+
 interface MandatoryMinimumWithdrawalResult {
   rrifBySlot: Partial<Record<MemberSlot, number>>;
   lifBySlot: Partial<Record<MemberSlot, number>>;
@@ -208,7 +216,7 @@ export function simulateRetirementPlan(
     taxAttributes = projectedYear.nextTaxAttributes;
   }
 
-  const summary = summarizeProjection(years, balances);
+  const summary = summarizeProjection(context, years, balances, taxAttributes);
 
   return {
     summary,
@@ -272,16 +280,20 @@ function validateRetirementAges(
 function buildAnnualTimeline(context: NormalizedContext): PeriodState[] {
   const years: PeriodState[] = [];
   const { household } = context.input;
-  const finalAge = Math.min(
-    household.maxProjectionAge,
-    Math.max(
-      household.primary.profile.lifeExpectancy,
-      household.partner?.profile.lifeExpectancy ?? household.primary.profile.lifeExpectancy,
-    ),
+  const projectionCapOffset = Math.max(
+    0,
+    household.maxProjectionAge - household.primary.profile.currentAge,
+  );
+  const memberLifeExpectancyOffsets = getMemberEntries(context.input).map(
+    ({ member }) => Math.max(0, member.profile.lifeExpectancy - member.profile.currentAge),
+  );
+  const finalOffset = Math.min(
+    projectionCapOffset,
+    Math.max(...memberLifeExpectancyOffsets),
   );
   const length = Math.max(
     0,
-    finalAge - household.primary.profile.currentAge + 1,
+    finalOffset + 1,
   );
 
   for (let offset = 0; offset < length; offset += 1) {
@@ -3498,14 +3510,25 @@ function buildYearWarnings(
 }
 
 function summarizeProjection(
+  context: NormalizedContext,
   years: ProjectionYear[],
   balances: HouseholdLedger,
+  taxAttributes: HouseholdTaxAttributeLedger,
 ): SimulationSummary {
   const firstShortfall = years.find((year) => year.shortfallOrSurplus < 0);
-  const notableWarnings = Array.from(
-    new Set(years.flatMap((year) => year.warnings)),
+  const terminalEstateEstimate = estimateTerminalEstate(
+    context,
+    years,
+    balances,
+    taxAttributes,
   );
-  const estimatedEstateValue = sumBalances(balances);
+  const notableWarnings = Array.from(
+    new Set([
+      ...years.flatMap((year) => year.warnings),
+      ...terminalEstateEstimate.warnings,
+    ]),
+  );
+  const estimatedEstateValue = terminalEstateEstimate.grossEstateValue;
   const initialReadiness = firstShortfall
     ? "shortfall"
     : estimatedEstateValue < (years.at(-1)?.spending ?? 0)
@@ -3517,8 +3540,200 @@ function summarizeProjection(
     firstShortfallYear: firstShortfall?.calendarYear,
     lastProjectionYear: years.at(-1)?.calendarYear ?? new Date().getFullYear(),
     estimatedEstateValue: roundCurrency(estimatedEstateValue),
+    estimatedAfterTaxEstateValue: roundCurrency(
+      terminalEstateEstimate.afterTaxEstateValue,
+    ),
+    estimatedTerminalTaxLiability: roundCurrency(
+      terminalEstateEstimate.terminalTaxLiability,
+    ),
+    estimatedProbateAndEstateAdminCost:
+      terminalEstateEstimate.probateOrEstateAdminCost === undefined
+        ? undefined
+        : roundCurrency(terminalEstateEstimate.probateOrEstateAdminCost),
     notableWarnings,
   };
+}
+
+function estimateTerminalEstate(
+  context: NormalizedContext,
+  years: ProjectionYear[],
+  balances: HouseholdLedger,
+  taxAttributes: HouseholdTaxAttributeLedger,
+): TerminalEstateEstimate {
+  const grossEstateValue = sumBalances(balances);
+  const lastYear = years.at(-1);
+  const warnings: string[] = [];
+
+  if (!lastYear) {
+    return {
+      grossEstateValue,
+      afterTaxEstateValue: grossEstateValue,
+      terminalTaxLiability: 0,
+      warnings,
+    };
+  }
+
+  const projectionReachedLastModeledDeaths = getMemberEntries(context.input).every(
+    ({ slot, member }) =>
+      getAgeBySlot(lastYear, slot) >= member.profile.lifeExpectancy,
+  );
+
+  if (!projectionReachedLastModeledDeaths) {
+    warnings.push(
+      "Projection ended before the latest modeled death. After-tax estate values currently assume the household liquidates all modeled accounts at the projection horizon rather than at the actual future death date.",
+    );
+  }
+
+  let terminalTaxLiability = 0;
+
+  for (const { slot, member } of getMemberEntries(context.input)) {
+    const account = getAccountLedgerBySlot(balances, slot);
+    const grossSlotEstateValue = sumAccountLedger(account);
+
+    if (grossSlotEstateValue <= 0.01) {
+      continue;
+    }
+
+    const age = getAgeBySlot(lastYear, slot);
+    const realizedCapitalGain = Math.max(
+      0,
+      account.nonRegistered - account.nonRegisteredCostBase,
+    );
+    const allowableCapitalLossFromTerminalDisposition =
+      Math.max(0, account.nonRegisteredCostBase - account.nonRegistered) *
+      context.rules.taxableAccounts.capitalGainsInclusionRate;
+    const openingNetCapitalLossCarryforward = Math.max(
+      0,
+      getTaxAttributeLedgerBySlot(taxAttributes, slot).netCapitalLossCarryforward,
+    );
+    const taxableCapitalGainFromTerminalDisposition =
+      realizedCapitalGain * context.rules.taxableAccounts.capitalGainsInclusionRate;
+    const totalTerminalCapitalLossPool =
+      openingNetCapitalLossCarryforward +
+      allowableCapitalLossFromTerminalDisposition;
+    const remainingCapitalLossPoolAfterGains = Math.max(
+      0,
+      totalTerminalCapitalLossPool - taxableCapitalGainFromTerminalDisposition,
+    );
+    const netTaxableCapitalGain = Math.max(
+      0,
+      taxableCapitalGainFromTerminalDisposition - totalTerminalCapitalLossPool,
+    );
+    const terminalOrdinaryIncome =
+      account.rrsp + account.rrif + account.lira + account.lif;
+    const netTerminalOrdinaryIncome = Math.max(
+      0,
+      terminalOrdinaryIncome - remainingCapitalLossPoolAfterGains,
+    );
+
+    if (
+      remainingCapitalLossPoolAfterGains > 0 &&
+      terminalOrdinaryIncome > 0
+    ) {
+      warnings.push(
+        `Terminal estate estimate used ${roundCurrency(
+          Math.min(terminalOrdinaryIncome, remainingCapitalLossPoolAfterGains),
+        )} of ${labelForSlot(
+          slot,
+        ).toLowerCase()}'s available net capital losses against other income on the final return baseline.`,
+      );
+    }
+
+    if (account.dcPension > 0.01) {
+      warnings.push(
+        `Terminal estate estimate does not yet apply death-time tax or beneficiary treatment to ${labelForSlot(
+          slot,
+        ).toLowerCase()}'s defined-contribution pension balance. Probate and after-tax estate values may be overstated until DC pension death rules are modeled.`,
+      );
+    }
+
+    const terminalTaxEstimate = estimateIncomeTax({
+      taxableIncome: netTerminalOrdinaryIncome + netTaxableCapitalGain,
+      province: member.profile.provinceAtRetirement,
+      calendarYear: lastYear.calendarYear,
+      age,
+      eligiblePensionIncome: 0,
+    });
+    terminalTaxLiability += terminalTaxEstimate.totalTax;
+  }
+
+  const probateOrEstateAdminCost = estimateProbateOrEstateAdminCost(
+    context,
+    years,
+    balances,
+    warnings,
+  );
+  const afterTaxEstateValue = Math.max(
+    0,
+    grossEstateValue - terminalTaxLiability - (probateOrEstateAdminCost ?? 0),
+  );
+
+  return {
+    grossEstateValue,
+    afterTaxEstateValue,
+    terminalTaxLiability,
+    probateOrEstateAdminCost,
+    warnings,
+  };
+}
+
+function estimateProbateOrEstateAdminCost(
+  context: NormalizedContext,
+  years: ProjectionYear[],
+  balances: HouseholdLedger,
+  warnings: string[],
+): number | undefined {
+  const lastYear = years.at(-1);
+
+  if (!lastYear) {
+    return undefined;
+  }
+
+  const projectionReachedLastModeledDeaths = getMemberEntries(context.input).every(
+    ({ slot, member }) =>
+      getAgeBySlot(lastYear, slot) >= member.profile.lifeExpectancy,
+  );
+
+  if (!projectionReachedLastModeledDeaths) {
+    return undefined;
+  }
+
+  const probateBaseValue = sumProbateProxyBalances(balances);
+
+  if (probateBaseValue <= 0.01) {
+    return 0;
+  }
+
+  const province = resolveTerminalEstateProvince(context, years, balances);
+
+  warnings.push(
+    "Probate / estate administration cost is a baseline proxy that assumes the modeled estate requires a grant or certificate and that beneficiary designations or joint ownership have not removed assets from the estate.",
+  );
+
+  if (sumDcPensionBalances(balances) > 0.01) {
+    warnings.push(
+      "Probate proxy excludes modeled DC pension balances because beneficiary treatment and plan-level estate rules are not yet modeled.",
+    );
+  }
+
+  switch (province) {
+    case "ON":
+      return estimateOntarioEstateAdministrationTax(probateBaseValue);
+    case "BC":
+      return estimateBritishColumbiaProbateFee(probateBaseValue);
+    case "AB":
+      return estimateAlbertaProbateFee(probateBaseValue);
+    case "QC":
+      warnings.push(
+        "Quebec probate cost is not being estimated because it depends heavily on will form. Notarial wills generally avoid probate, while holograph and witnessed wills generally require verification.",
+      );
+      return undefined;
+    default:
+      warnings.push(
+        `Probate proxy is not yet modeled for ${province}. Gross and after-tax estate values currently exclude province-specific estate administration costs there.`,
+      );
+      return undefined;
+  }
 }
 
 function buildAssumptionList(context: NormalizedContext): string[] {
@@ -3539,6 +3754,8 @@ function buildAssumptionList(context: NormalizedContext): string[] {
     "Survivor years now include baseline CPP/QPP survivor-pension support when the surviving spouse is not already on a combined public-pension path or when a manual annual survivor-benefit override is supplied, but full Service Canada / Retraite Quebec combined-benefit math remains incomplete.",
     "Survivor-year spending defaults to 72% of the couple after-tax spending target unless expenseProfile.survivorSpendingPercentOfCouple is explicitly provided.",
     "Death years use a baseline mid-year heuristic: recurring income, contributions, and mandatory RRIF/LIF withdrawals are prorated to 50%, and couple spending transitions halfway toward the survivor spending path for that year.",
+    "Projection length now follows the longest modeled remaining lifetime in the household, capped by household.maxProjectionAge relative to the primary member's age.",
+    "Summary estate values now include a baseline projection-end liquidation proxy: remaining RRSP / RRIF / LIRA / LIF balances are treated as taxable on a terminal return, net capital losses can offset capital gains and then other income on a final-return baseline, and ON / BC / AB probate-style estate administration costs are approximated when the projection reaches the modeled final death. Beneficiary designations, joint ownership, Quebec will-form detail, and DC pension death treatment remain incomplete.",
   ];
 }
 
@@ -3616,6 +3833,29 @@ function sumMemberTaxState(
 
 function sumBalances(balances: HouseholdLedger): number {
   return sumAccountLedger(balances.primary) + (balances.partner ? sumAccountLedger(balances.partner) : 0);
+}
+
+function sumProbateProxyBalances(balances: HouseholdLedger): number {
+  return (
+    sumProbateProxyAccountBalances(balances.primary) +
+    (balances.partner ? sumProbateProxyAccountBalances(balances.partner) : 0)
+  );
+}
+
+function sumProbateProxyAccountBalances(account: AccountLedger): number {
+  return (
+    account.rrsp +
+    account.rrif +
+    account.tfsa +
+    account.nonRegistered +
+    account.cash +
+    account.lira +
+    account.lif
+  );
+}
+
+function sumDcPensionBalances(balances: HouseholdLedger): number {
+  return balances.primary.dcPension + (balances.partner?.dcPension ?? 0);
 }
 
 function sumAccountLedger(account: AccountLedger): number {
@@ -3729,6 +3969,95 @@ function roundCurrency(value: number): number {
 
 function labelForSlot(slot: MemberSlot): string {
   return slot === "primary" ? "Primary household member" : "Partner";
+}
+
+function getAgeBySlot(year: ProjectionYear, slot: MemberSlot): number {
+  return slot === "primary" ? year.primaryAge : year.partnerAge ?? year.primaryAge;
+}
+
+function resolveTerminalEstateProvince(
+  context: NormalizedContext,
+  years: ProjectionYear[],
+  balances: HouseholdLedger,
+): ProvinceCode {
+  const lastYear = years.at(-1);
+
+  if (!lastYear) {
+    return context.input.household.primary.profile.provinceAtRetirement;
+  }
+
+  const slotBalances: Array<{ slot: MemberSlot; balance: number }> = [
+    { slot: "primary", balance: sumProbateProxyAccountBalances(balances.primary) },
+  ];
+
+  if (balances.partner) {
+    slotBalances.push({
+      slot: "partner",
+      balance: sumProbateProxyAccountBalances(balances.partner),
+    });
+  }
+
+  const selectedSlot =
+    slotBalances.sort((left, right) => right.balance - left.balance)[0]?.slot ??
+    "primary";
+  const member = getMemberEntries(context.input).find(
+    (entry) => entry.slot === selectedSlot,
+  )?.member;
+
+  if (!member) {
+    return context.input.household.primary.profile.provinceAtRetirement;
+  }
+
+  const ageGapToLifeExpectancy =
+    member.profile.lifeExpectancy - getAgeBySlot(lastYear, selectedSlot);
+
+  if (ageGapToLifeExpectancy > 0.01) {
+    return context.input.household.primary.profile.provinceAtRetirement;
+  }
+
+  return member.profile.provinceAtRetirement;
+}
+
+function estimateOntarioEstateAdministrationTax(estateValue: number): number {
+  if (estateValue <= 50_000) {
+    return 0;
+  }
+
+  return Math.ceil((estateValue - 50_000) / 1_000) * 15;
+}
+
+function estimateBritishColumbiaProbateFee(estateValue: number): number {
+  if (estateValue <= 25_000) {
+    return 0;
+  }
+
+  const firstBand = Math.max(
+    0,
+    Math.min(estateValue, 50_000) - 25_000,
+  );
+  const secondBand = Math.max(0, estateValue - 50_000);
+
+  return Math.ceil(firstBand / 1_000) * 6 + Math.ceil(secondBand / 1_000) * 14;
+}
+
+function estimateAlbertaProbateFee(estateValue: number): number {
+  if (estateValue <= 10_000) {
+    return 35;
+  }
+
+  if (estateValue <= 25_000) {
+    return 135;
+  }
+
+  if (estateValue <= 125_000) {
+    return 275;
+  }
+
+  if (estateValue <= 250_000) {
+    return 400;
+  }
+
+  return 525;
 }
 
 function clampRate(value: number): number {
