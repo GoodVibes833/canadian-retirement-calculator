@@ -86,6 +86,10 @@ export interface LockedInAccountPolicy {
   plannedConversionAge?: number;
   manualMinimumAnnualWithdrawal?: number;
   manualMaximumAnnualWithdrawal?: number;
+  quebecTemporaryIncomeRequested?: boolean;
+  quebecTemporaryIncomeOptionOffered?: boolean;
+  quebecTemporaryIncomeNoOtherFrvConfirmed?: boolean;
+  quebecTemporaryIncomeEstimatedOtherIncome?: number;
   assumedPreviousYearReturnRate?: number;
   usedOneTimeFiftyPercentUnlocking?: boolean;
   notes?: string;

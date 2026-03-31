@@ -96,6 +96,9 @@ export interface LockedInJurisdictionRuleSet {
   incomeAccountLabel: string;
   usesRrifMinimumRule: boolean;
   noMaximumWithdrawalAge?: number;
+  underNoMaximumAgePrescribedRate?: number;
+  temporaryIncomeMaximumAnnual?: number;
+  temporaryIncomeEstimatedIncomeOffsetRate?: number;
   fallbackLongTermRate?: number;
   applySixPercentFloor?: boolean;
   annuityCertainEndAge?: number;

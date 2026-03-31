@@ -33,6 +33,21 @@
       "accessedOn": "2026-03-30"
     },
     {
+      "label": "Retraite Quebec - Modifications aux FRV a compter de 2025",
+      "url": "https://www.retraitequebec.gouv.qc.ca/fr/professionnels/cri_frv/Pages/modifications-frv-2025.aspx",
+      "accessedOn": "2026-03-31"
+    },
+    {
+      "label": "Retraite Quebec - Montants des prestations et donnees de base 2026",
+      "url": "https://www.retraitequebec.gouv.qc.ca/fr/landing/indexation/Pages/montants-donnees-base.aspx?form=MG0AV3",
+      "accessedOn": "2026-03-31"
+    },
+    {
+      "label": "Retraite Quebec - Flash retraite - Capsule 41",
+      "url": "https://www.retraitequebec.gouv.qc.ca/fr/flashretraite/Pages/capsule_retraite_041.aspx",
+      "accessedOn": "2026-03-31"
+    },
+    {
       "label": "FSRA - Ontario LIF and LRIF maximum annual income payment amount tables and instructions",
       "url": "https://www.fsrao.ca/consumers/pensions/life-income-funds-lifs-ontario/lif-and-lrif-maximum-annual-income-payment-amount-tables-and-instructions",
       "accessedOn": "2026-03-31"
@@ -266,9 +281,12 @@
         "incomeAccountLabel": "FRV",
         "usesRrifMinimumRule": true,
         "noMaximumWithdrawalAge": 55,
+        "underNoMaximumAgePrescribedRate": 0.0625,
+        "temporaryIncomeMaximumAnnual": 37300,
+        "temporaryIncomeEstimatedIncomeOffsetRate": 1,
         "notes": [
           "Since January 1, 2025, Quebec FRV withdrawals have no statutory annual maximum for people age 55 or older at the time of withdrawal.",
-          "Quebec FRV rules remain materially different and temporary-income rules for younger cases are not yet modeled.",
+          "For people under age 55, the baseline path uses the published prescribed rate and annual temporary-income ceiling, net of estimated other income, when a temporary-income request is explicitly modeled.",
           "Manual annual overrides should still be allowed for Quebec."
         ]
       }

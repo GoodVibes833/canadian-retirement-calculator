@@ -1,0 +1,84 @@
+{
+  "household": {
+    "householdType": "single",
+    "primary": {
+      "profile": {
+        "id": "primary",
+        "currentAge": 50,
+        "retirementAge": 50,
+        "lifeExpectancy": 85,
+        "provinceAtRetirement": "QC",
+        "pensionPlan": "QPP",
+        "yearsResidedInCanadaAfter18": 32
+      },
+      "employment": {
+        "baseAnnualIncome": 0,
+        "annualGrowthRate": 0,
+        "partTimeIncomeAfterRetirement": [
+          {
+            "startAge": 50,
+            "annualAmount": 20000,
+            "inflationLinked": false,
+            "description": "Part-time consulting income"
+          }
+        ]
+      },
+      "publicBenefits": {
+        "cppQppEstimateMode": "manual-at-start-age",
+        "manualMonthlyPensionAtStartAge": 0,
+        "pensionStartAge": 65,
+        "oasEstimateMode": "residence-years",
+        "oasStartAge": 65,
+        "oasEligible": false
+      },
+      "lockedInAccountPolicy": {
+        "jurisdiction": "QC",
+        "preIncomeAccountLabel": "CRI",
+        "incomeAccountLabel": "FRV",
+        "plannedConversionAge": 50,
+        "quebecTemporaryIncomeRequested": true,
+        "quebecTemporaryIncomeOptionOffered": true,
+        "quebecTemporaryIncomeNoOtherFrvConfirmed": true
+      },
+      "accounts": {
+        "rrsp": 0,
+        "rrif": 0,
+        "tfsa": 0,
+        "nonRegistered": 0,
+        "cash": 0,
+        "lira": 0,
+        "lif": 200000,
+        "dcPension": 0
+      },
+      "contributions": {
+        "rrsp": 0,
+        "tfsa": 0,
+        "nonRegistered": 0,
+        "contributionEscalationRate": 0
+      }
+    },
+    "inflationRate": 0.02,
+    "preRetirementReturnRate": 0.045,
+    "postRetirementReturnRate": 0.04,
+    "annualFeeRate": 0.006,
+    "taxMode": "nominal",
+    "withdrawalOrder": "rrsp-rrif-first",
+    "pensionIncomeSplittingEnabled": false,
+    "oasClawbackAwareMode": true,
+    "gisModelingEnabled": false,
+    "expenseProfile": {
+      "desiredAfterTaxSpending": 55000,
+      "housing": 18000,
+      "utilities": 2400,
+      "food": 4800,
+      "transportation": 3600,
+      "healthcare": 1600,
+      "insurance": 1500,
+      "travelAndRecreation": 8000,
+      "debtPayments": 0
+    },
+    "oneTimeEvents": [],
+    "projectionStartYear": 2026,
+    "maxProjectionAge": 52
+  }
+}

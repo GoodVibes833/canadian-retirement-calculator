@@ -134,7 +134,7 @@ Current engine status:
 
 - baseline `LIRA -> LIF` conversion now exists,
 - baseline `ON / BC / AB` minimum / maximum guardrails now exist,
-- Quebec `FRV` now recognizes the 2025+ no-maximum rule for ages 55 and older, while younger temporary-income logic remains partial,
+- Quebec `FRV` now recognizes the 2025+ no-maximum rule for ages 55 and older, and under age 55 it can baseline-model a temporary-income election when the request and declaration assumptions are supplied,
 - manual annual min / max overrides are still preferred when available.
 
 Medium-term:

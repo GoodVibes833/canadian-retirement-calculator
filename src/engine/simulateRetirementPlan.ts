@@ -857,20 +857,14 @@ function buildLockedInAnnualLimits(
       );
 
     if (policy?.jurisdiction === "QC" && policy.manualMaximumAnnualWithdrawal === undefined) {
-      if (
-        jurisdictionRule?.noMaximumWithdrawalAge !== undefined &&
-        frame.age >= jurisdictionRule.noMaximumWithdrawalAge
-      ) {
-        maximumWithdrawal = account.lif;
-        warnings.push(
-          "Quebec FRV withdrawals are being modeled under the 2025+ rule set with no statutory annual maximum at age 55 or older. Temporary-income and institution-specific processing are still not separately modeled.",
-        );
-      } else {
-        maximumWithdrawal = minimumWithdrawal;
-        warnings.push(
-          "Quebec FRV under-age-55 maximum withdrawal is not fully modeled. Manual annual maximum input is strongly recommended for younger Quebec cases.",
-        );
-      }
+      maximumWithdrawal = buildQuebecFrvMaximumWithdrawal(
+        frame,
+        account.lif,
+        minimumWithdrawal,
+        policy!,
+        jurisdictionRule,
+        warnings,
+      );
     }
 
     if (maximumWithdrawal < minimumWithdrawal) {
@@ -903,6 +897,103 @@ function buildLockedInAnnualLimits(
   }
 
   return limits;
+}
+
+function buildQuebecFrvMaximumWithdrawal(
+  frame: MemberFrame,
+  openingLifBalance: number,
+  minimumWithdrawal: number,
+  policy: NonNullable<HouseholdMemberInput["lockedInAccountPolicy"]>,
+  jurisdictionRule:
+    | CanadaRuleSet["lockedIn"]["jurisdictions"][keyof CanadaRuleSet["lockedIn"]["jurisdictions"]]
+    | undefined,
+  warnings: string[],
+): number {
+  if (
+    jurisdictionRule?.noMaximumWithdrawalAge !== undefined &&
+    frame.age >= jurisdictionRule.noMaximumWithdrawalAge
+  ) {
+    warnings.push(
+      "Quebec FRV withdrawals are being modeled under the 2025+ rule set with no statutory annual maximum at age 55 or older. Temporary-income and institution-specific processing are still not separately modeled.",
+    );
+    return openingLifBalance;
+  }
+
+  const prescribedRate = Math.max(
+    0,
+    jurisdictionRule?.underNoMaximumAgePrescribedRate ?? 0,
+  );
+  const prescribedRateMaximum = Math.min(
+    openingLifBalance,
+    openingLifBalance * prescribedRate,
+  );
+
+  if (policy?.quebecTemporaryIncomeRequested !== true) {
+    warnings.push(
+      "Quebec FRV under-age-55 maximum is being modeled without a temporary-income election. Enable the quebecTemporaryIncomeRequested input if the user plans to request annual temporary income.",
+    );
+    return Math.max(minimumWithdrawal, prescribedRateMaximum);
+  }
+
+  if (policy.quebecTemporaryIncomeOptionOffered === false) {
+    warnings.push(
+      "Quebec FRV temporary income was requested, but the policy input says this contract does not offer the temporary-income option. Only baseline life-income limits were modeled.",
+    );
+    return Math.max(minimumWithdrawal, prescribedRateMaximum);
+  }
+
+  if (policy.quebecTemporaryIncomeNoOtherFrvConfirmed === false) {
+    warnings.push(
+      "Quebec FRV temporary income was requested, but another FRV was also indicated. The official declaration requires no other FRV, so only baseline life-income limits were modeled.",
+    );
+    return Math.max(minimumWithdrawal, prescribedRateMaximum);
+  }
+
+  if (jurisdictionRule?.temporaryIncomeMaximumAnnual === undefined) {
+    warnings.push(
+      "Quebec FRV temporary-income base amounts were unavailable in the current rule set. Manual annual maximum input is strongly recommended for younger Quebec cases.",
+    );
+    return Math.max(minimumWithdrawal, prescribedRateMaximum);
+  }
+
+  const estimatedOtherIncome =
+    policy.quebecTemporaryIncomeEstimatedOtherIncome ??
+    estimateQuebecTemporaryIncomeOtherIncomeProxy(frame);
+  const temporaryIncomeOffsetRate =
+    jurisdictionRule.temporaryIncomeEstimatedIncomeOffsetRate ?? 1;
+  const temporaryIncomeMaximum = Math.max(
+    0,
+    jurisdictionRule.temporaryIncomeMaximumAnnual -
+      estimatedOtherIncome * temporaryIncomeOffsetRate,
+  );
+  const totalMaximum = Math.max(prescribedRateMaximum, temporaryIncomeMaximum);
+
+  if (policy.quebecTemporaryIncomeEstimatedOtherIncome === undefined) {
+    warnings.push(
+      "Quebec FRV temporary income used a baseline proxy for the next-12-month 'other income' declaration. Employment, public pensions, DB pension, annuity, rental, foreign pension, and recurring taxable-account cash flows were included, but registered-plan withdrawals, social assistance, disability income, and institution-specific adjustments still need user review.",
+    );
+  }
+
+  if (
+    policy.quebecTemporaryIncomeOptionOffered === undefined ||
+    policy.quebecTemporaryIncomeNoOtherFrvConfirmed === undefined
+  ) {
+    warnings.push(
+      "Quebec FRV temporary income is assuming the contract offers the option and that no other FRV exists for the declaration year unless the user states otherwise.",
+    );
+  }
+
+  warnings.push(
+    `Quebec FRV under-age-55 maximum uses a start-of-year temporary-income election approximation. Estimated other income was ${roundCurrency(
+      estimatedOtherIncome,
+    )}, the temporary-income ceiling was ${roundCurrency(
+      temporaryIncomeMaximum,
+    )}, and the prescribed-rate life-income ceiling was ${roundCurrency(
+      prescribedRateMaximum,
+    )}.`,
+  );
+
+  return Math.min(openingLifBalance, Math.max(minimumWithdrawal, totalMaximum));
 }
 
 function applyMandatoryMinimumWithdrawals(
@@ -2547,6 +2638,19 @@ function inferLockedInMaximumWithdrawal(
   );
 }
 
+function estimateQuebecTemporaryIncomeOtherIncomeProxy(
+  frame: MemberFrame,
+): number {
+  return Math.max(
+    0,
+    frame.employmentIncome +
+      frame.cppQppIncome +
+      frame.oasIncome +
+      frame.dbPensionIncome +
+      frame.otherPlannedIncome,
+  );
+}
+
 function calculateLifeIncomeFundMaximumFactor(
   age: number,
   longTermRate: number,
@@ -2744,7 +2848,7 @@ function buildAssumptionList(context: NormalizedContext): string[] {
     "Tax estimates currently use 2026 federal and selected provincial tables with basic personal, age, and pension-income credits for federal, Ontario, British Columbia, and Alberta, plus a Quebec path that now includes dividend handling, residual foreign tax credits, a baseline career-extension credit, and a household-level Schedule B age and retirement-income approximation.",
     "OAS recovery tax is estimated with prior-year threshold mapping and capped by modeled OAS income.",
     "Drawdown currently supports a practical blended heuristic, not full optimization.",
-    "Locked-in accounts now support baseline LIRA-to-LIF conversion, RRIF-style minimums, and jurisdiction-aware fallback maximums, with manual annual overrides preferred when available.",
+    "Locked-in accounts now support baseline LIRA-to-LIF conversion, RRIF-style minimums, and jurisdiction-aware fallback maximums. Quebec FRV modeling recognizes the 2025+ no-maximum rule at age 55+, and under age 55 it can approximate a start-of-year temporary-income election when the request and declaration inputs are supplied. Manual annual overrides remain preferred when available.",
     "Non-registered withdrawals now track adjusted cost base, realize taxable capital gains, and carry forward net capital losses using the baseline Canadian inclusion rate, while explicit taxable-account interest, foreign dividends, Canadian eligible / non-eligible dividends, and return-of-capital cash distributions can be modeled annually. Return-of-capital distributions also reduce modeled non-registered market value. Baseline federal foreign tax credit support is now joined by ON / BC / AB / QC provincial residual-credit support for foreign non-business income, while exact form-level detail, treaty-specific cases, and carry-back or terminal-loss handling remain incomplete.",
     "Pension splitting currently uses an annual household heuristic on planned eligible pension income before discretionary registered drawdown.",
     "QPP delayed-start increases are now baseline-supported through age 72, while early-start QPP reductions use a set-proportion approximation unless a manual start-age amount is provided.",

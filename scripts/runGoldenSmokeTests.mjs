@@ -943,6 +943,59 @@ const taxChecks = [
       );
     },
   },
+  {
+    id: "T26",
+    label: "Quebec FRV under age 55 can use a temporary-income election baseline",
+    check() {
+      const input = readJson(
+        "data/fixtures/locked-in/qc-frv-under-55-temporary-income.json",
+      );
+      const result = simulateRetirementPlan(input, rules);
+      const firstYear = result.years[0];
+
+      assert(
+        Math.abs(firstYear.lifWithdrawals - 17300) < 0.01,
+        "Quebec FRV under-age-55 temporary-income scenario should cap withdrawals at the modeled 50% MGA minus estimated-income ceiling when that exceeds the prescribed-rate life-income ceiling.",
+      );
+      assert(
+        firstYear.warnings.some((warning) =>
+          warning.includes("start-of-year temporary-income election approximation"),
+        ),
+        "Quebec FRV under-age-55 scenario should warn that the temporary-income path is using a start-of-year approximation.",
+      );
+      assert(
+        firstYear.warnings.some((warning) =>
+          warning.includes("baseline proxy for the next-12-month 'other income' declaration"),
+        ),
+        "Quebec FRV under-age-55 scenario should warn when the declaration income uses a modeled proxy instead of a manual input.",
+      );
+    },
+  },
+  {
+    id: "T27",
+    label: "Quebec FRV under age 55 stays on the prescribed-rate path without a temporary-income request",
+    check() {
+      const input = readJson(
+        "data/fixtures/locked-in/qc-frv-under-55-temporary-income.json",
+      );
+      input.household.primary.lockedInAccountPolicy.quebecTemporaryIncomeRequested =
+        false;
+
+      const result = simulateRetirementPlan(input, rules);
+      const firstYear = result.years[0];
+
+      assert(
+        Math.abs(firstYear.lifWithdrawals - 12500) < 0.01,
+        "Without a temporary-income request, the under-age-55 Quebec FRV should stay on the prescribed-rate life-income ceiling.",
+      );
+      assert(
+        firstYear.warnings.some((warning) =>
+          warning.includes("without a temporary-income election"),
+        ),
+        "Quebec FRV under-age-55 no-election scenario should explain that temporary income was not modeled.",
+      );
+    },
+  },
 ];
 
 for (const check of taxChecks) {
