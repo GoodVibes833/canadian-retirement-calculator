@@ -32,6 +32,23 @@ type EditableBalances = {
 
 type EditableLockedInBooleanChoice = "unspecified" | "yes" | "no";
 
+type EditableDefinedBenefitPension = {
+  enabled: boolean;
+  annualAmount: number;
+  startAge: number;
+  indexationRatePercent: number;
+  bridgeTo65AnnualAmount: number;
+  survivorContinuationPercent: number;
+};
+
+type EditableScheduledIncome = {
+  enabled: boolean;
+  annualAmount: number;
+  startAge: number;
+  endAge: number;
+  inflationLinked: boolean;
+};
+
 type EditableMember = {
   age: number;
   retirementAge: number;
@@ -39,11 +56,14 @@ type EditableMember = {
   pensionPlan: PensionPlanType;
   livesAloneForTaxYear: boolean;
   employmentIncome: number;
+  retirementPartTimeIncome: EditableScheduledIncome;
   cppMonthly: number;
   cppStartAge: number;
   oasStartAge: number;
   oasResidenceYears: number;
   oasEligible: boolean;
+  definedBenefitPension: EditableDefinedBenefitPension;
+  annuityIncome: EditableScheduledIncome;
   rentalIncome: number;
   foreignPensionIncome: number;
   balances: EditableBalances;
@@ -2312,6 +2332,349 @@ function MemberEditor(props: {
       <div className="advanced-settings-grid">
         <section className="advanced-settings-card">
           <div className="member-header">
+            <h4>Defined Benefit Pension</h4>
+          </div>
+          <p className="section-note">
+            Use this for employer or public-service pensions with a known annual
+            amount, indexation, bridge benefit, or survivor continuation.
+          </p>
+          <label className="toggle-row compact-toggle-row">
+            <input
+              type="checkbox"
+              checked={member.definedBenefitPension.enabled}
+              onChange={(event) =>
+                onChange({
+                  ...member,
+                  definedBenefitPension: {
+                    ...member.definedBenefitPension,
+                    enabled: event.target.checked,
+                  },
+                })
+              }
+            />
+            <span>Model a defined benefit pension for this member</span>
+          </label>
+          <div className="form-section compact-form-section">
+            <label>
+              <FieldLabel
+                label="Annual DB Pension"
+                hint="Gross annual pension amount at the pension start age."
+              />
+              <input
+                type="number"
+                disabled={!member.definedBenefitPension.enabled}
+                value={member.definedBenefitPension.annualAmount}
+                onChange={(event) =>
+                  onChange({
+                    ...member,
+                    definedBenefitPension: {
+                      ...member.definedBenefitPension,
+                      annualAmount: readNumber(event.target.value),
+                    },
+                  })
+                }
+              />
+            </label>
+            <label>
+              <FieldLabel
+                label="DB Start Age"
+                hint="Age when the pension starts paying."
+              />
+              <input
+                type="number"
+                disabled={!member.definedBenefitPension.enabled}
+                value={member.definedBenefitPension.startAge}
+                onChange={(event) =>
+                  onChange({
+                    ...member,
+                    definedBenefitPension: {
+                      ...member.definedBenefitPension,
+                      startAge: readNumber(event.target.value),
+                    },
+                  })
+                }
+              />
+            </label>
+            <label>
+              <FieldLabel
+                label="Indexation (%)"
+                hint="Annual pension indexation, if any."
+              />
+              <input
+                type="number"
+                step="0.1"
+                disabled={!member.definedBenefitPension.enabled}
+                value={member.definedBenefitPension.indexationRatePercent}
+                onChange={(event) =>
+                  onChange({
+                    ...member,
+                    definedBenefitPension: {
+                      ...member.definedBenefitPension,
+                      indexationRatePercent: readNumber(event.target.value),
+                    },
+                  })
+                }
+              />
+            </label>
+            <label>
+              <FieldLabel
+                label="Bridge to 65"
+                hint="Annual bridge benefit that stops at age 65."
+              />
+              <input
+                type="number"
+                disabled={!member.definedBenefitPension.enabled}
+                value={member.definedBenefitPension.bridgeTo65AnnualAmount}
+                onChange={(event) =>
+                  onChange({
+                    ...member,
+                    definedBenefitPension: {
+                      ...member.definedBenefitPension,
+                      bridgeTo65AnnualAmount: readNumber(event.target.value),
+                    },
+                  })
+                }
+              />
+            </label>
+            <label>
+              <FieldLabel
+                label="Survivor Continuation (%)"
+                hint="Percent of the DB pension that continues to a surviving spouse."
+              />
+              <input
+                type="number"
+                step="1"
+                disabled={!member.definedBenefitPension.enabled}
+                value={member.definedBenefitPension.survivorContinuationPercent}
+                onChange={(event) =>
+                  onChange({
+                    ...member,
+                    definedBenefitPension: {
+                      ...member.definedBenefitPension,
+                      survivorContinuationPercent: readNumber(
+                        event.target.value,
+                      ),
+                    },
+                  })
+                }
+              />
+            </label>
+          </div>
+        </section>
+
+        <section className="advanced-settings-card">
+          <div className="member-header">
+            <h4>Retirement Part-Time Income</h4>
+          </div>
+          <p className="section-note">
+            Use this for phased retirement or consulting income that continues
+            after the main job stops.
+          </p>
+          <label className="toggle-row compact-toggle-row">
+            <input
+              type="checkbox"
+              checked={member.retirementPartTimeIncome.enabled}
+              onChange={(event) =>
+                onChange({
+                  ...member,
+                  retirementPartTimeIncome: {
+                    ...member.retirementPartTimeIncome,
+                    enabled: event.target.checked,
+                  },
+                })
+              }
+            />
+            <span>Model part-time income after retirement</span>
+          </label>
+          <div className="form-section compact-form-section">
+            <label>
+              <FieldLabel
+                label="Annual Amount"
+                hint="Recurring annual part-time or consulting income."
+              />
+              <input
+                type="number"
+                disabled={!member.retirementPartTimeIncome.enabled}
+                value={member.retirementPartTimeIncome.annualAmount}
+                onChange={(event) =>
+                  onChange({
+                    ...member,
+                    retirementPartTimeIncome: {
+                      ...member.retirementPartTimeIncome,
+                      annualAmount: readNumber(event.target.value),
+                    },
+                  })
+                }
+              />
+            </label>
+            <label>
+              <FieldLabel
+                label="Start Age"
+                hint="Age when the post-retirement work income begins."
+              />
+              <input
+                type="number"
+                disabled={!member.retirementPartTimeIncome.enabled}
+                value={member.retirementPartTimeIncome.startAge}
+                onChange={(event) =>
+                  onChange({
+                    ...member,
+                    retirementPartTimeIncome: {
+                      ...member.retirementPartTimeIncome,
+                      startAge: readNumber(event.target.value),
+                    },
+                  })
+                }
+              />
+            </label>
+            <label>
+              <FieldLabel
+                label="End Age"
+                hint="Leave at 0 when you want the income to continue through the projection."
+              />
+              <input
+                type="number"
+                disabled={!member.retirementPartTimeIncome.enabled}
+                value={member.retirementPartTimeIncome.endAge}
+                onChange={(event) =>
+                  onChange({
+                    ...member,
+                    retirementPartTimeIncome: {
+                      ...member.retirementPartTimeIncome,
+                      endAge: readNumber(event.target.value),
+                    },
+                  })
+                }
+              />
+            </label>
+            <label className="toggle-row compact-toggle-row">
+              <input
+                type="checkbox"
+                disabled={!member.retirementPartTimeIncome.enabled}
+                checked={member.retirementPartTimeIncome.inflationLinked}
+                onChange={(event) =>
+                  onChange({
+                    ...member,
+                    retirementPartTimeIncome: {
+                      ...member.retirementPartTimeIncome,
+                      inflationLinked: event.target.checked,
+                    },
+                  })
+                }
+              />
+              <span>Inflation-linked</span>
+            </label>
+          </div>
+        </section>
+
+        <section className="advanced-settings-card">
+          <div className="member-header">
+            <h4>Annuity Income</h4>
+          </div>
+          <p className="section-note">
+            Use this for guaranteed annuity cash flow that starts at a known age.
+          </p>
+          <label className="toggle-row compact-toggle-row">
+            <input
+              type="checkbox"
+              checked={member.annuityIncome.enabled}
+              onChange={(event) =>
+                onChange({
+                  ...member,
+                  annuityIncome: {
+                    ...member.annuityIncome,
+                    enabled: event.target.checked,
+                  },
+                })
+              }
+            />
+            <span>Model annuity income for this member</span>
+          </label>
+          <div className="form-section compact-form-section">
+            <label>
+              <FieldLabel
+                label="Annual Amount"
+                hint="Recurring annual annuity payment."
+              />
+              <input
+                type="number"
+                disabled={!member.annuityIncome.enabled}
+                value={member.annuityIncome.annualAmount}
+                onChange={(event) =>
+                  onChange({
+                    ...member,
+                    annuityIncome: {
+                      ...member.annuityIncome,
+                      annualAmount: readNumber(event.target.value),
+                    },
+                  })
+                }
+              />
+            </label>
+            <label>
+              <FieldLabel
+                label="Start Age"
+                hint="Age when the annuity begins."
+              />
+              <input
+                type="number"
+                disabled={!member.annuityIncome.enabled}
+                value={member.annuityIncome.startAge}
+                onChange={(event) =>
+                  onChange({
+                    ...member,
+                    annuityIncome: {
+                      ...member.annuityIncome,
+                      startAge: readNumber(event.target.value),
+                    },
+                  })
+                }
+              />
+            </label>
+            <label>
+              <FieldLabel
+                label="End Age"
+                hint="Leave at 0 for a lifetime-style annuity in the current baseline."
+              />
+              <input
+                type="number"
+                disabled={!member.annuityIncome.enabled}
+                value={member.annuityIncome.endAge}
+                onChange={(event) =>
+                  onChange({
+                    ...member,
+                    annuityIncome: {
+                      ...member.annuityIncome,
+                      endAge: readNumber(event.target.value),
+                    },
+                  })
+                }
+              />
+            </label>
+            <label className="toggle-row compact-toggle-row">
+              <input
+                type="checkbox"
+                disabled={!member.annuityIncome.enabled}
+                checked={member.annuityIncome.inflationLinked}
+                onChange={(event) =>
+                  onChange({
+                    ...member,
+                    annuityIncome: {
+                      ...member.annuityIncome,
+                      inflationLinked: event.target.checked,
+                    },
+                  })
+                }
+              />
+              <span>Inflation-linked</span>
+            </label>
+          </div>
+        </section>
+      </div>
+
+      <div className="advanced-settings-grid">
+        <section className="advanced-settings-card">
+          <div className="member-header">
             <h4>Locked-In Accounts</h4>
           </div>
           <p className="section-note">
@@ -3239,6 +3602,10 @@ function createEditableMember(member: HouseholdMemberInput): EditableMember {
     pensionPlan: member.profile.pensionPlan,
     livesAloneForTaxYear: member.profile.livesAloneForTaxYear === true,
     employmentIncome: member.employment.baseAnnualIncome,
+    retirementPartTimeIncome: createEditableScheduledIncome(
+      member.employment.partTimeIncomeAfterRetirement,
+      member.profile.retirementAge,
+    ),
     cppMonthly:
       member.publicBenefits.manualMonthlyPensionAtStartAge ??
       member.publicBenefits.statementMonthlyPensionAt65 ??
@@ -3249,6 +3616,11 @@ function createEditableMember(member: HouseholdMemberInput): EditableMember {
       member.publicBenefits.oasResidenceYearsOverride ??
       member.profile.yearsResidedInCanadaAfter18,
     oasEligible: member.publicBenefits.oasEligible !== false,
+    definedBenefitPension: createEditableDefinedBenefitPension(member),
+    annuityIncome: createEditableScheduledIncome(
+      member.annuityIncome,
+      member.profile.retirementAge,
+    ),
     rentalIncome: firstRecurringIncomeAmount(member.rentalIncome),
     foreignPensionIncome: firstRecurringIncomeAmount(member.foreignPensionIncome),
     balances: {
@@ -3360,6 +3732,10 @@ function applyMemberScenario(
   member.profile.livesAloneForTaxYear = editable.livesAloneForTaxYear;
   member.profile.yearsResidedInCanadaAfter18 = editable.oasResidenceYears;
   member.employment.baseAnnualIncome = editable.employmentIncome;
+  member.employment.partTimeIncomeAfterRetirement = buildScheduledIncomeInput(
+    editable.retirementPartTimeIncome,
+    "UI retirement part-time income",
+  );
   member.publicBenefits.cppQppEstimateMode = "manual-at-start-age";
   member.publicBenefits.manualMonthlyPensionAtStartAge = editable.cppMonthly;
   member.publicBenefits.pensionStartAge = editable.cppStartAge;
@@ -3376,6 +3752,13 @@ function applyMemberScenario(
   member.jointOwnershipProfile = buildJointOwnershipInput(editable.jointOwnership);
   member.estateAdministrationProfile = buildEstateAdministrationInput(
     editable.estateAdministration,
+  );
+  member.definedBenefitPension = buildDefinedBenefitPensionInput(
+    editable.definedBenefitPension,
+  );
+  member.annuityIncome = buildScheduledIncomeInput(
+    editable.annuityIncome,
+    "UI annuity income",
   );
   member.rentalIncome = createRecurringIncome(
     editable.rentalIncome,
@@ -3416,6 +3799,40 @@ function createRecurringIncome(
       description,
     },
   ];
+}
+
+function createEditableDefinedBenefitPension(
+  member: HouseholdMemberInput,
+): EditableDefinedBenefitPension {
+  const pension = member.definedBenefitPension;
+
+  return {
+    enabled: Boolean(pension),
+    annualAmount: pension?.annualAmount ?? 0,
+    startAge: pension?.startAge ?? member.profile.retirementAge,
+    indexationRatePercent: toPercentValue(pension?.indexationRate ?? 0),
+    bridgeTo65AnnualAmount: pension?.bridgeTo65AnnualAmount ?? 0,
+    survivorContinuationPercent: toPercentValue(
+      pension?.survivorContinuationPercent ?? 0,
+    ),
+  };
+}
+
+function createEditableScheduledIncome(
+  flows:
+    | HouseholdMemberInput["employment"]["partTimeIncomeAfterRetirement"]
+    | HouseholdMemberInput["annuityIncome"],
+  defaultStartAge: number,
+): EditableScheduledIncome {
+  const firstFlow = flows?.[0];
+
+  return {
+    enabled: Boolean(firstFlow),
+    annualAmount: firstFlow?.annualAmount ?? 0,
+    startAge: firstFlow?.startAge ?? defaultStartAge,
+    endAge: firstFlow?.endAge ?? 0,
+    inflationLinked: firstFlow?.inflationLinked === true,
+  };
 }
 
 function createEditableTaxProfile(member: HouseholdMemberInput): EditableTaxProfile {
@@ -3619,6 +4036,47 @@ function buildLockedInPolicyInput(editable: EditableLockedInPolicy) {
   }
 
   return nextPolicy;
+}
+
+function buildDefinedBenefitPensionInput(
+  editable: EditableDefinedBenefitPension,
+) {
+  if (!editable.enabled) {
+    return undefined;
+  }
+
+  return {
+    annualAmount: editable.annualAmount,
+    startAge: editable.startAge,
+    indexationRate: fromPercentValue(editable.indexationRatePercent),
+    bridgeTo65AnnualAmount:
+      editable.bridgeTo65AnnualAmount > 0
+        ? editable.bridgeTo65AnnualAmount
+        : undefined,
+    survivorContinuationPercent:
+      editable.survivorContinuationPercent > 0
+        ? clampPercent(editable.survivorContinuationPercent)
+        : undefined,
+  };
+}
+
+function buildScheduledIncomeInput(
+  editable: EditableScheduledIncome,
+  description: string,
+) {
+  if (!editable.enabled || editable.annualAmount <= 0) {
+    return [];
+  }
+
+  return [
+    {
+      startAge: editable.startAge,
+      endAge: editable.endAge > 0 ? editable.endAge : undefined,
+      annualAmount: editable.annualAmount,
+      inflationLinked: editable.inflationLinked,
+      description,
+    },
+  ];
 }
 
 function buildBeneficiaryDesignationsInput(
@@ -4271,6 +4729,33 @@ function validateMember(
     });
   }
 
+  if (member.retirementPartTimeIncome.enabled) {
+    if (member.retirementPartTimeIncome.annualAmount <= 0) {
+      issues.push({
+        level: "error",
+        message: `${label} retirement part-time income needs an annual amount greater than zero when enabled.`,
+      });
+    }
+
+    if (member.retirementPartTimeIncome.startAge < member.retirementAge) {
+      issues.push({
+        level: "warning",
+        message: `${label} retirement part-time income starts before the retirement age currently entered.`,
+      });
+    }
+
+    if (
+      member.retirementPartTimeIncome.endAge > 0 &&
+      member.retirementPartTimeIncome.endAge <
+        member.retirementPartTimeIncome.startAge
+    ) {
+      issues.push({
+        level: "error",
+        message: `${label} retirement part-time income end age cannot be earlier than the start age.`,
+      });
+    }
+  }
+
   if (member.cppMonthly < 0) {
     issues.push({
       level: "error",
@@ -4304,6 +4789,58 @@ function validateMember(
       level: "warning",
       message: `${label} has fewer than 10 residence years entered, which often means OAS will depend on treaty rules or be unavailable.`,
     });
+  }
+
+  if (member.definedBenefitPension.enabled) {
+    if (member.definedBenefitPension.annualAmount <= 0) {
+      issues.push({
+        level: "error",
+        message: `${label} defined benefit pension needs an annual amount greater than zero when enabled.`,
+      });
+    }
+
+    if (member.definedBenefitPension.startAge < 45) {
+      issues.push({
+        level: "warning",
+        message: `${label} defined benefit pension start age is unusually early.`,
+      });
+    }
+
+    issues.push(
+      ...validatePercentScenarioValue(
+        `${label} defined benefit indexation`,
+        member.definedBenefitPension.indexationRatePercent,
+        -5,
+        10,
+        4,
+      ),
+    );
+
+    if (
+      member.definedBenefitPension.survivorContinuationPercent < 0 ||
+      member.definedBenefitPension.survivorContinuationPercent > 100
+    ) {
+      issues.push({
+        level: "error",
+        message: `${label} defined benefit survivor continuation percent must stay between 0% and 100%.`,
+      });
+    }
+  }
+
+  if (member.annuityIncome.enabled) {
+    if (member.annuityIncome.annualAmount <= 0) {
+      issues.push({
+        level: "error",
+        message: `${label} annuity income needs an annual amount greater than zero when enabled.`,
+      });
+    }
+
+    if (member.annuityIncome.endAge > 0 && member.annuityIncome.endAge < member.annuityIncome.startAge) {
+      issues.push({
+        level: "error",
+        message: `${label} annuity income end age cannot be earlier than the start age.`,
+      });
+    }
   }
 
   if (province === "QC" && member.pensionPlan !== "QPP") {
@@ -4705,6 +5242,28 @@ function normalizeImportedMember(
       member?.employmentIncome,
       fallback.employmentIncome,
     ),
+    retirementPartTimeIncome: {
+      enabled:
+        typeof member?.retirementPartTimeIncome?.enabled === "boolean"
+          ? member.retirementPartTimeIncome.enabled
+          : fallback.retirementPartTimeIncome.enabled,
+      annualAmount: safeNumber(
+        member?.retirementPartTimeIncome?.annualAmount,
+        fallback.retirementPartTimeIncome.annualAmount,
+      ),
+      startAge: safeNumber(
+        member?.retirementPartTimeIncome?.startAge,
+        fallback.retirementPartTimeIncome.startAge,
+      ),
+      endAge: safeNumber(
+        member?.retirementPartTimeIncome?.endAge,
+        fallback.retirementPartTimeIncome.endAge,
+      ),
+      inflationLinked:
+        typeof member?.retirementPartTimeIncome?.inflationLinked === "boolean"
+          ? member.retirementPartTimeIncome.inflationLinked
+          : fallback.retirementPartTimeIncome.inflationLinked,
+    },
     cppMonthly: safeNumber(member?.cppMonthly, fallback.cppMonthly),
     cppStartAge: safeNumber(member?.cppStartAge, fallback.cppStartAge),
     oasStartAge: safeNumber(member?.oasStartAge, fallback.oasStartAge),
@@ -4716,6 +5275,54 @@ function normalizeImportedMember(
       typeof member?.oasEligible === "boolean"
         ? member.oasEligible
         : fallback.oasEligible,
+    definedBenefitPension: {
+      enabled:
+        typeof member?.definedBenefitPension?.enabled === "boolean"
+          ? member.definedBenefitPension.enabled
+          : fallback.definedBenefitPension.enabled,
+      annualAmount: safeNumber(
+        member?.definedBenefitPension?.annualAmount,
+        fallback.definedBenefitPension.annualAmount,
+      ),
+      startAge: safeNumber(
+        member?.definedBenefitPension?.startAge,
+        fallback.definedBenefitPension.startAge,
+      ),
+      indexationRatePercent: safeNumber(
+        member?.definedBenefitPension?.indexationRatePercent,
+        fallback.definedBenefitPension.indexationRatePercent,
+      ),
+      bridgeTo65AnnualAmount: safeNumber(
+        member?.definedBenefitPension?.bridgeTo65AnnualAmount,
+        fallback.definedBenefitPension.bridgeTo65AnnualAmount,
+      ),
+      survivorContinuationPercent: safeNumber(
+        member?.definedBenefitPension?.survivorContinuationPercent,
+        fallback.definedBenefitPension.survivorContinuationPercent,
+      ),
+    },
+    annuityIncome: {
+      enabled:
+        typeof member?.annuityIncome?.enabled === "boolean"
+          ? member.annuityIncome.enabled
+          : fallback.annuityIncome.enabled,
+      annualAmount: safeNumber(
+        member?.annuityIncome?.annualAmount,
+        fallback.annuityIncome.annualAmount,
+      ),
+      startAge: safeNumber(
+        member?.annuityIncome?.startAge,
+        fallback.annuityIncome.startAge,
+      ),
+      endAge: safeNumber(
+        member?.annuityIncome?.endAge,
+        fallback.annuityIncome.endAge,
+      ),
+      inflationLinked:
+        typeof member?.annuityIncome?.inflationLinked === "boolean"
+          ? member.annuityIncome.inflationLinked
+          : fallback.annuityIncome.inflationLinked,
+    },
     rentalIncome: safeNumber(member?.rentalIncome, fallback.rentalIncome),
     foreignPensionIncome: safeNumber(
       member?.foreignPensionIncome,
