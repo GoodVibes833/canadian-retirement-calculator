@@ -399,6 +399,11 @@ select {
   margin: 0 0 14px;
 }
 
+.compact-toggle-row {
+  margin-top: 12px;
+  margin-bottom: 0;
+}
+
 .toggle-grid {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }

@@ -6,6 +6,8 @@ import type {
   HouseholdType,
   PensionPlanType,
   ProvinceCode,
+  QuebecWillForm,
+  QuebecWillVerificationMethod,
   SimulationInput,
   WithdrawalOrder,
 } from "../domain/types.js";
@@ -31,6 +33,7 @@ type EditableMember = {
   retirementAge: number;
   lifeExpectancy: number;
   pensionPlan: PensionPlanType;
+  livesAloneForTaxYear: boolean;
   employmentIncome: number;
   cppMonthly: number;
   cppStartAge: number;
@@ -43,6 +46,7 @@ type EditableMember = {
   taxProfile: EditableTaxProfile;
   beneficiaryDesignations: EditableBeneficiaryDesignations;
   jointOwnership: EditableJointOwnership;
+  estateAdministration: EditableEstateAdministration;
 };
 
 type EditableTaxProfile = {
@@ -68,12 +72,25 @@ type EditableJointOwnership = {
   cashJointPercent: number;
 };
 
+type EditableEstateAdministration = {
+  quebecWillForm: QuebecWillForm;
+  quebecWillVerificationMethod: QuebecWillVerificationMethod;
+  manualQuebecVerificationCost: number;
+};
+
 type EditableOneTimeEvent = {
   id: string;
   age: number;
   amount: number;
   direction: "inflow" | "outflow";
   description: string;
+};
+
+type EditableIncomeTestedBenefitsBaseIncome = {
+  primaryAssessableIncome: number;
+  partnerAssessableIncome: number;
+  combinedAssessableIncome: number;
+  calendarYear: number;
 };
 
 type EditableScenario = {
@@ -91,6 +108,7 @@ type EditableScenario = {
   gisModelingEnabled: boolean;
   desiredAfterTaxSpending: number;
   survivorSpendingPercent: number;
+  incomeTestedBenefitsBaseIncome: EditableIncomeTestedBenefitsBaseIncome;
   oneTimeEvents: EditableOneTimeEvent[];
   primary: EditableMember;
   partner: EditableMember | null;
@@ -151,6 +169,24 @@ const beneficiaryDesignationOptions: Array<{
   { value: "estate", label: "Estate" },
   { value: "spouse", label: "Spouse" },
   { value: "other-beneficiary", label: "Other Beneficiary" },
+];
+const quebecWillFormOptions: Array<{
+  value: QuebecWillForm;
+  label: string;
+}> = [
+  { value: "unknown", label: "Unknown / not set" },
+  { value: "notarial", label: "Notarial" },
+  { value: "witnessed", label: "Witnessed" },
+  { value: "holograph", label: "Holograph" },
+];
+const quebecWillVerificationMethodOptions: Array<{
+  value: QuebecWillVerificationMethod;
+  label: string;
+}> = [
+  { value: "unknown", label: "Unknown / baseline" },
+  { value: "not-required", label: "Not required" },
+  { value: "notary", label: "By notary" },
+  { value: "court", label: "By court" },
 ];
 const withdrawalOrderOptions: Array<{
   value: WithdrawalOrder;
@@ -1121,6 +1157,113 @@ export function App() {
                         setScenario((current) => ({
                           ...current,
                           annualFeeRatePercent: readNumber(event.target.value),
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+              </section>
+
+              <section className="member-card">
+                <div className="member-header">
+                  <h3>Income-Tested Benefit Baseline</h3>
+                </div>
+                <p className="section-note">
+                  Seed the prior-year assessable income used for first-year GIS
+                  and Allowance logic, instead of relying on the engine&apos;s
+                  current-year proxy fallback.
+                </p>
+                <div className="form-section">
+                  <label>
+                    <FieldLabel
+                      label="Prior Tax Year"
+                      hint="Usually the calendar year before the projection starts."
+                    />
+                    <input
+                      type="number"
+                      value={
+                        scenario.incomeTestedBenefitsBaseIncome.calendarYear
+                      }
+                      onChange={(event) =>
+                        setScenario((current) => ({
+                          ...current,
+                          incomeTestedBenefitsBaseIncome: {
+                            ...current.incomeTestedBenefitsBaseIncome,
+                            calendarYear: readNumber(event.target.value),
+                          },
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    <FieldLabel
+                      label="Primary Assessable Income"
+                      hint="Prior-year assessable income used for first-year GIS / Allowance baseline."
+                    />
+                    <input
+                      type="number"
+                      value={
+                        scenario.incomeTestedBenefitsBaseIncome
+                          .primaryAssessableIncome
+                      }
+                      onChange={(event) =>
+                        setScenario((current) => ({
+                          ...current,
+                          incomeTestedBenefitsBaseIncome: {
+                            ...current.incomeTestedBenefitsBaseIncome,
+                            primaryAssessableIncome: readNumber(
+                              event.target.value,
+                            ),
+                          },
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    <FieldLabel
+                      label="Partner Assessable Income"
+                      hint="Only used in couple scenarios. Leave at zero for single households."
+                    />
+                    <input
+                      type="number"
+                      disabled={scenario.householdType === "single"}
+                      value={
+                        scenario.incomeTestedBenefitsBaseIncome
+                          .partnerAssessableIncome
+                      }
+                      onChange={(event) =>
+                        setScenario((current) => ({
+                          ...current,
+                          incomeTestedBenefitsBaseIncome: {
+                            ...current.incomeTestedBenefitsBaseIncome,
+                            partnerAssessableIncome: readNumber(
+                              event.target.value,
+                            ),
+                          },
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    <FieldLabel
+                      label="Combined Assessable Income"
+                      hint="Useful when you know the household prior-year total but not each person&apos;s exact split."
+                    />
+                    <input
+                      type="number"
+                      value={
+                        scenario.incomeTestedBenefitsBaseIncome
+                          .combinedAssessableIncome
+                      }
+                      onChange={(event) =>
+                        setScenario((current) => ({
+                          ...current,
+                          incomeTestedBenefitsBaseIncome: {
+                            ...current.incomeTestedBenefitsBaseIncome,
+                            combinedAssessableIncome: readNumber(
+                              event.target.value,
+                            ),
+                          },
                         }))
                       }
                     />
@@ -2270,6 +2413,19 @@ function MemberEditor(props: {
             These settings affect baseline probate, survivor rollover, and
             death-year tax treatment.
           </p>
+          <label className="toggle-row compact-toggle-row">
+            <input
+              type="checkbox"
+              checked={member.livesAloneForTaxYear}
+              onChange={(event) =>
+                onChange({
+                  ...member,
+                  livesAloneForTaxYear: event.target.checked,
+                })
+              }
+            />
+            <span>Lives alone for Quebec tax-year relief modeling</span>
+          </label>
           <div className="form-section compact-form-section">
             <label>
               <FieldLabel
@@ -2384,6 +2540,79 @@ function MemberEditor(props: {
                     "cashJointPercent",
                     readNumber(event.target.value),
                   )
+                }
+              />
+            </label>
+            <label>
+              <FieldLabel
+                label="Quebec Will Form"
+                hint="Used for Quebec estate verification and probate-style cost branching."
+              />
+              <select
+                value={member.estateAdministration.quebecWillForm}
+                onChange={(event) =>
+                  onChange({
+                    ...member,
+                    estateAdministration: {
+                      ...member.estateAdministration,
+                      quebecWillForm: event.target.value as QuebecWillForm,
+                    },
+                  })
+                }
+              >
+                {quebecWillFormOptions.map((option) => (
+                  <option key={`will-form-${option.value}`} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <FieldLabel
+                label="Verification Method"
+                hint="Only matters for non-notarial Quebec wills in the current baseline."
+              />
+              <select
+                value={member.estateAdministration.quebecWillVerificationMethod}
+                onChange={(event) =>
+                  onChange({
+                    ...member,
+                    estateAdministration: {
+                      ...member.estateAdministration,
+                      quebecWillVerificationMethod:
+                        event.target.value as QuebecWillVerificationMethod,
+                    },
+                  })
+                }
+              >
+                {quebecWillVerificationMethodOptions.map((option) => (
+                  <option
+                    key={`verification-method-${option.value}`}
+                    value={option.value}
+                  >
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <FieldLabel
+                label="Manual Verification Cost"
+                hint="Override for Quebec will verification or estate-settlement cost in the current baseline."
+              />
+              <input
+                type="number"
+                value={member.estateAdministration.manualQuebecVerificationCost}
+                onChange={(event) =>
+                  onChange({
+                    ...member,
+                    estateAdministration: {
+                      ...member.estateAdministration,
+                      manualQuebecVerificationCost: readNumber(
+                        event.target.value,
+                      ),
+                    },
+                  })
                 }
               />
             </label>
@@ -2740,6 +2969,9 @@ function createEditableScenario(preset: UiPreset): EditableScenario {
     desiredAfterTaxSpending: household.expenseProfile.desiredAfterTaxSpending,
     survivorSpendingPercent:
       (household.expenseProfile.survivorSpendingPercentOfCouple ?? 0.72) * 100,
+    incomeTestedBenefitsBaseIncome: createEditableIncomeTestedBenefitsBaseIncome(
+      preset,
+    ),
     oneTimeEvents: household.oneTimeEvents.map((event) =>
       createEditableOneTimeEvent(event),
     ),
@@ -2754,6 +2986,7 @@ function createEditableMember(member: HouseholdMemberInput): EditableMember {
     retirementAge: member.profile.retirementAge,
     lifeExpectancy: member.profile.lifeExpectancy,
     pensionPlan: member.profile.pensionPlan,
+    livesAloneForTaxYear: member.profile.livesAloneForTaxYear === true,
     employmentIncome: member.employment.baseAnnualIncome,
     cppMonthly:
       member.publicBenefits.manualMonthlyPensionAtStartAge ??
@@ -2778,6 +3011,7 @@ function createEditableMember(member: HouseholdMemberInput): EditableMember {
     taxProfile: createEditableTaxProfile(member),
     beneficiaryDesignations: createEditableBeneficiaryDesignations(member),
     jointOwnership: createEditableJointOwnership(member),
+    estateAdministration: createEditableEstateAdministration(member),
   };
 }
 
@@ -2831,6 +3065,11 @@ function buildInputFromScenario(
     scenario.householdType === "single"
       ? undefined
       : clampPercent(scenario.survivorSpendingPercent);
+  nextInput.household.incomeTestedBenefitsBaseIncome =
+    buildIncomeTestedBenefitsBaseIncomeInput(
+      scenario.incomeTestedBenefitsBaseIncome,
+      scenario.householdType,
+    );
   nextInput.household.oneTimeEvents = scenario.oneTimeEvents
     .map((event) => ({
       age: event.age,
@@ -2865,6 +3104,7 @@ function applyMemberScenario(
   member.profile.lifeExpectancy = editable.lifeExpectancy;
   member.profile.provinceAtRetirement = province;
   member.profile.pensionPlan = editable.pensionPlan;
+  member.profile.livesAloneForTaxYear = editable.livesAloneForTaxYear;
   member.profile.yearsResidedInCanadaAfter18 = editable.oasResidenceYears;
   member.employment.baseAnnualIncome = editable.employmentIncome;
   member.publicBenefits.cppQppEstimateMode = "manual-at-start-age";
@@ -2880,6 +3120,9 @@ function applyMemberScenario(
     editable.beneficiaryDesignations,
   );
   member.jointOwnershipProfile = buildJointOwnershipInput(editable.jointOwnership);
+  member.estateAdministrationProfile = buildEstateAdministrationInput(
+    editable.estateAdministration,
+  );
   member.rentalIncome = createRecurringIncome(
     editable.rentalIncome,
     editable.age,
@@ -2962,6 +3205,32 @@ function createEditableJointOwnership(
     cashJointPercent:
       (member.jointOwnershipProfile?.cashJointWithSurvivingSpousePercent ?? 0) *
       100,
+  };
+}
+
+function createEditableEstateAdministration(
+  member: HouseholdMemberInput,
+): EditableEstateAdministration {
+  return {
+    quebecWillForm: member.estateAdministrationProfile?.quebecWillForm ?? "unknown",
+    quebecWillVerificationMethod:
+      member.estateAdministrationProfile?.quebecWillVerificationMethod ?? "unknown",
+    manualQuebecVerificationCost:
+      member.estateAdministrationProfile?.manualQuebecVerificationCost ?? 0,
+  };
+}
+
+function createEditableIncomeTestedBenefitsBaseIncome(
+  preset: UiPreset,
+): EditableIncomeTestedBenefitsBaseIncome {
+  const baseIncome = preset.input.household.incomeTestedBenefitsBaseIncome;
+
+  return {
+    primaryAssessableIncome: baseIncome?.primaryAssessableIncome ?? 0,
+    partnerAssessableIncome: baseIncome?.partnerAssessableIncome ?? 0,
+    combinedAssessableIncome: baseIncome?.combinedAssessableIncome ?? 0,
+    calendarYear:
+      baseIncome?.calendarYear ?? preset.input.household.projectionStartYear - 1,
   };
 }
 
@@ -3054,6 +3323,54 @@ function buildJointOwnershipInput(editable: EditableJointOwnership) {
   return Object.keys(nextJointOwnership).length > 0
     ? nextJointOwnership
     : undefined;
+}
+
+function buildEstateAdministrationInput(
+  editable: EditableEstateAdministration,
+) {
+  const nextEstateAdministration: NonNullable<
+    HouseholdMemberInput["estateAdministrationProfile"]
+  > = {};
+
+  if (editable.quebecWillForm !== "unknown") {
+    nextEstateAdministration.quebecWillForm = editable.quebecWillForm;
+  }
+  if (editable.quebecWillVerificationMethod !== "unknown") {
+    nextEstateAdministration.quebecWillVerificationMethod =
+      editable.quebecWillVerificationMethod;
+  }
+  if (editable.manualQuebecVerificationCost > 0) {
+    nextEstateAdministration.manualQuebecVerificationCost =
+      editable.manualQuebecVerificationCost;
+  }
+
+  return Object.keys(nextEstateAdministration).length > 0
+    ? nextEstateAdministration
+    : undefined;
+}
+
+function buildIncomeTestedBenefitsBaseIncomeInput(
+  editable: EditableIncomeTestedBenefitsBaseIncome,
+  householdType: HouseholdType,
+) {
+  const nextBaseIncome: NonNullable<
+    SimulationInput["household"]["incomeTestedBenefitsBaseIncome"]
+  > = {};
+
+  if (editable.primaryAssessableIncome > 0) {
+    nextBaseIncome.primaryAssessableIncome = editable.primaryAssessableIncome;
+  }
+  if (householdType !== "single" && editable.partnerAssessableIncome > 0) {
+    nextBaseIncome.partnerAssessableIncome = editable.partnerAssessableIncome;
+  }
+  if (editable.combinedAssessableIncome > 0) {
+    nextBaseIncome.combinedAssessableIncome = editable.combinedAssessableIncome;
+  }
+  if (editable.calendarYear > 0) {
+    nextBaseIncome.calendarYear = editable.calendarYear;
+  }
+
+  return Object.keys(nextBaseIncome).length > 0 ? nextBaseIncome : undefined;
 }
 
 function buildChartPoints(
@@ -3212,6 +3529,10 @@ function buildReviewFacts(
     {
       label: "One-Time Events",
       value: String(scenario.oneTimeEvents.length),
+    },
+    {
+      label: "GIS Seed Year",
+      value: String(scenario.incomeTestedBenefitsBaseIncome.calendarYear),
     },
     {
       label: "Projection End",
@@ -3476,6 +3797,58 @@ function validateScenario(
     });
   }
 
+  if (scenario.incomeTestedBenefitsBaseIncome.calendarYear < 1900) {
+    issues.push({
+      level: "error",
+      message: "Prior-year GIS / Allowance seed year must be a valid calendar year.",
+    });
+  }
+
+  if (scenario.incomeTestedBenefitsBaseIncome.primaryAssessableIncome < 0) {
+    issues.push({
+      level: "error",
+      message: "Primary assessable income seed cannot be negative.",
+    });
+  }
+
+  if (scenario.incomeTestedBenefitsBaseIncome.partnerAssessableIncome < 0) {
+    issues.push({
+      level: "error",
+      message: "Partner assessable income seed cannot be negative.",
+    });
+  }
+
+  if (scenario.incomeTestedBenefitsBaseIncome.combinedAssessableIncome < 0) {
+    issues.push({
+      level: "error",
+      message: "Combined assessable income seed cannot be negative.",
+    });
+  }
+
+  if (
+    scenario.householdType === "single" &&
+    scenario.incomeTestedBenefitsBaseIncome.partnerAssessableIncome > 0
+  ) {
+    issues.push({
+      level: "warning",
+      message: "Partner assessable income seed is entered, but the household is currently modeled as single.",
+    });
+  }
+
+  if (
+    scenario.incomeTestedBenefitsBaseIncome.combinedAssessableIncome > 0 &&
+    scenario.incomeTestedBenefitsBaseIncome.combinedAssessableIncome <
+      scenario.incomeTestedBenefitsBaseIncome.primaryAssessableIncome +
+        (scenario.householdType === "single"
+          ? 0
+          : scenario.incomeTestedBenefitsBaseIncome.partnerAssessableIncome)
+  ) {
+    issues.push({
+      level: "warning",
+      message: "Combined assessable income seed is lower than the entered person-level assessable incomes.",
+    });
+  }
+
   for (const event of scenario.oneTimeEvents) {
     if (event.age < scenario.primary.age) {
       issues.push({
@@ -3712,6 +4085,41 @@ function validateMember(
     });
   }
 
+  if (member.livesAloneForTaxYear && province !== "QC") {
+    issues.push({
+      level: "warning",
+      message: `${label} has the Quebec living-alone flag turned on, but the scenario province is outside Quebec.`,
+    });
+  }
+
+  if (member.estateAdministration.manualQuebecVerificationCost < 0) {
+    issues.push({
+      level: "error",
+      message: `${label} manual Quebec verification cost cannot be negative.`,
+    });
+  }
+
+  if (
+    member.estateAdministration.quebecWillForm !== "unknown" &&
+    province !== "QC"
+  ) {
+    issues.push({
+      level: "warning",
+      message: `${label} has Quebec will inputs entered, but the province is currently outside Quebec.`,
+    });
+  }
+
+  if (
+    member.estateAdministration.quebecWillForm === "notarial" &&
+    member.estateAdministration.quebecWillVerificationMethod !== "unknown" &&
+    member.estateAdministration.quebecWillVerificationMethod !== "not-required"
+  ) {
+    issues.push({
+      level: "warning",
+      message: `${label} is marked as having a notarial Quebec will, which usually does not require verification.`,
+    });
+  }
+
   if (member.retirementAge < 45 || member.retirementAge > 80) {
     issues.push({
       level: "warning",
@@ -3824,6 +4232,24 @@ function normalizeImportedScenario(
       scenario.survivorSpendingPercent,
       fallback.survivorSpendingPercent,
     ),
+    incomeTestedBenefitsBaseIncome: {
+      primaryAssessableIncome: safeNumber(
+        scenario.incomeTestedBenefitsBaseIncome?.primaryAssessableIncome,
+        fallback.incomeTestedBenefitsBaseIncome.primaryAssessableIncome,
+      ),
+      partnerAssessableIncome: safeNumber(
+        scenario.incomeTestedBenefitsBaseIncome?.partnerAssessableIncome,
+        fallback.incomeTestedBenefitsBaseIncome.partnerAssessableIncome,
+      ),
+      combinedAssessableIncome: safeNumber(
+        scenario.incomeTestedBenefitsBaseIncome?.combinedAssessableIncome,
+        fallback.incomeTestedBenefitsBaseIncome.combinedAssessableIncome,
+      ),
+      calendarYear: safeNumber(
+        scenario.incomeTestedBenefitsBaseIncome?.calendarYear,
+        fallback.incomeTestedBenefitsBaseIncome.calendarYear,
+      ),
+    },
     oneTimeEvents: normalizeImportedOneTimeEvents(
       scenario.oneTimeEvents,
       fallback.oneTimeEvents,
@@ -3847,6 +4273,10 @@ function normalizeImportedMember(
     pensionPlan: pensionPlanOptions.includes(member?.pensionPlan)
       ? member.pensionPlan
       : fallback.pensionPlan,
+    livesAloneForTaxYear:
+      typeof member?.livesAloneForTaxYear === "boolean"
+        ? member.livesAloneForTaxYear
+        : fallback.livesAloneForTaxYear,
     employmentIncome: safeNumber(
       member?.employmentIncome,
       fallback.employmentIncome,
@@ -3942,6 +4372,25 @@ function normalizeImportedMember(
       cashJointPercent: safeNumber(
         member?.jointOwnership?.cashJointPercent,
         fallback.jointOwnership.cashJointPercent,
+      ),
+    },
+    estateAdministration: {
+      quebecWillForm: quebecWillFormOptions.some(
+        (option) => option.value === member?.estateAdministration?.quebecWillForm,
+      )
+        ? member?.estateAdministration?.quebecWillForm ??
+          fallback.estateAdministration.quebecWillForm
+        : fallback.estateAdministration.quebecWillForm,
+      quebecWillVerificationMethod: quebecWillVerificationMethodOptions.some(
+        (option) =>
+          option.value === member?.estateAdministration?.quebecWillVerificationMethod,
+      )
+        ? member?.estateAdministration?.quebecWillVerificationMethod ??
+          fallback.estateAdministration.quebecWillVerificationMethod
+        : fallback.estateAdministration.quebecWillVerificationMethod,
+      manualQuebecVerificationCost: safeNumber(
+        member?.estateAdministration?.manualQuebecVerificationCost,
+        fallback.estateAdministration.manualQuebecVerificationCost,
       ),
     },
   };
