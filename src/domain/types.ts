@@ -46,6 +46,7 @@ export interface PersonProfile {
   provinceAtRetirement: ProvinceCode;
   pensionPlan: PensionPlanType;
   yearsResidedInCanadaAfter18: number;
+  livesAloneForTaxYear?: boolean;
 }
 
 export interface EmploymentIncomeInput {

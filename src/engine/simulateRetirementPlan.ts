@@ -106,6 +106,7 @@ interface MemberTaxState {
   province: ProvinceCode;
   oasIncome: number;
   age: number;
+  livesAloneForTaxYear: boolean;
   eligiblePensionIncome: number;
   pensionIncomeSplitIn: number;
   pensionIncomeSplitOut: number;
@@ -1134,6 +1135,7 @@ function buildBaseTaxState(
       province: frame.province,
       oasIncome: frame.oasIncome,
       age: frame.age,
+      livesAloneForTaxYear: frame.member.profile.livesAloneForTaxYear === true,
       eligiblePensionIncome: estimateEligiblePensionIncome(
         frame,
         rrifShare,
@@ -1434,6 +1436,7 @@ function applyQuebecTaxReliefMeasures(
   const familyIncomeReductionThreshold = 42090;
   const familyIncomeReductionRate = 0.1875;
   const quebecAgeAmount = 3906;
+  const quebecLivingAloneAmount = 2128;
   const quebecRetirementIncomeAmountMax = 3470;
 
   const familyIncomeProxy = qcEntries.reduce(
@@ -1449,11 +1452,15 @@ function applyQuebecTaxReliefMeasures(
     }
 
     const ageClaimAmount = state.age >= 65 ? quebecAgeAmount : 0;
+    const livingAloneClaimAmount = state.livesAloneForTaxYear
+      ? quebecLivingAloneAmount
+      : 0;
     const retirementIncomeClaimAmount = Math.min(
       quebecRetirementIncomeAmountMax,
       Math.max(0, state.eligiblePensionIncome) * 1.25,
     );
-    const claimBase = ageClaimAmount + retirementIncomeClaimAmount;
+    const claimBase =
+      ageClaimAmount + livingAloneClaimAmount + retirementIncomeClaimAmount;
 
     claimBaseBySlot[slot] = claimBase;
     totalClaimBase += claimBase;
@@ -1499,7 +1506,7 @@ function applyQuebecTaxReliefMeasures(
   }
 
   warnings.push(
-    "Quebec Schedule B age and retirement-income amounts are now modeled with a household-level 2025 schedule approximation. The living-alone amount is not yet modeled, and taxable income is used as a proxy for line 275 family income.",
+    "Quebec Schedule B age, living-alone, and retirement-income amounts are now modeled with a household-level 2025 schedule approximation when the explicit livesAloneForTaxYear input is supplied. Taxable income is still used as a proxy for line 275 family income.",
   );
 
   return totalCreditApplied;
@@ -3125,7 +3132,7 @@ function buildAssumptionList(context: NormalizedContext): string[] {
     `Inflation assumption: ${(context.input.household.inflationRate * 100).toFixed(2)}%.`,
     `Pre-retirement return assumption: ${(context.input.household.preRetirementReturnRate * 100).toFixed(2)}%.`,
     `Post-retirement return assumption: ${(context.input.household.postRetirementReturnRate * 100).toFixed(2)}%.`,
-    "Tax estimates currently use 2026 federal and selected provincial tables with basic personal, age, and pension-income credits for federal, Ontario, British Columbia, and Alberta, plus a Quebec path that now includes dividend handling, residual foreign tax credits, a baseline career-extension credit, and a household-level Schedule B age and retirement-income approximation.",
+    "Tax estimates currently use 2026 federal and selected provincial tables with basic personal, age, and pension-income credits for federal, Ontario, British Columbia, and Alberta, plus a Quebec path that now includes dividend handling, residual foreign tax credits, a baseline career-extension credit, and a household-level Schedule B age, living-alone, and retirement-income approximation.",
     "OAS recovery tax is estimated with prior-year threshold mapping and capped by modeled OAS income.",
     "Drawdown currently supports a practical blended heuristic, not full optimization.",
     "Locked-in accounts now support baseline LIRA-to-LIF conversion, RRIF-style minimums, and jurisdiction-aware fallback maximums. Quebec FRV modeling recognizes the 2025+ no-maximum rule at age 55+, and under age 55 it can approximate a start-of-year temporary-income election when the request and declaration inputs are supplied. Manual annual overrides remain preferred when available.",

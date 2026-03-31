@@ -1074,6 +1074,36 @@ const taxChecks = [
       );
     },
   },
+  {
+    id: "T31",
+    label: "Quebec living-alone input increases the Schedule B credit",
+    check() {
+      const baseInput = readJson("data/fixtures/quebec/qc-living-alone-credit.json");
+      const aloneInput = readJson("data/fixtures/quebec/qc-living-alone-credit.json");
+      baseInput.household.primary.profile.livesAloneForTaxYear = false;
+
+      const baseResult = simulateRetirementPlan(baseInput, rules);
+      const aloneResult = simulateRetirementPlan(aloneInput, rules);
+      const baseYear = baseResult.years[0];
+      const aloneYear = aloneResult.years[0];
+
+      assert(
+        aloneYear.quebecTaxReliefMeasuresCredit >
+          baseYear.quebecTaxReliefMeasuresCredit,
+        "Supplying the Quebec living-alone input should increase the modeled Schedule B credit.",
+      );
+      assert(
+        aloneYear.taxes < baseYear.taxes,
+        "The added Quebec living-alone amount should reduce modeled Quebec tax.",
+      );
+      assert(
+        aloneYear.warnings.some((warning) =>
+          warning.includes("living-alone"),
+        ),
+        "Quebec living-alone scenario should warn that the living-alone amount depends on an explicit user input.",
+      );
+    },
+  },
 ];
 
 for (const check of taxChecks) {
