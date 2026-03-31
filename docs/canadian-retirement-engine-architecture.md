@@ -155,7 +155,7 @@ The scaffold is intentionally incomplete in these areas:
 
 - taxes now use a 2026 federal and province-aware scaffold for ON, BC, AB, and QC, including basic personal, age, and pension-income credits for federal / ON / BC / AB and a partial Quebec path,
 - RRIF minimum withdrawals are modeled, and locked-in accounts now support baseline LIRA-to-LIF conversion plus ON / BC / AB fallback LIF guardrails with Quebec warning-heavy partial support,
-- non-registered withdrawals now track adjusted cost base and realize taxable capital gains using the ruleset inclusion rate, but still warn heavily when ACB is missing and do not yet model dividend / interest character or capital-loss carryforwards,
+- non-registered withdrawals now track adjusted cost base and realize taxable capital gains using the ruleset inclusion rate, while explicit taxable-account interest can be modeled as annual cash income; the engine still warns heavily when ACB is missing and does not yet model dividend character or capital-loss carryforwards,
 - GIS is not calculated,
 - pension splitting now uses an annual heuristic on planned eligible pension income before discretionary drawdown, not a full lifetime optimization,
 - spouse-aware survivor logic now includes a baseline spousal asset rollover and defined-benefit survivor continuation, but still omits CPP survivor pension and estate-tax effects,

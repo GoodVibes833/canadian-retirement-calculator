@@ -66,6 +66,11 @@
       "label": "CRA - Capital Gains 2025",
       "url": "https://www.canada.ca/en/revenue-agency/services/forms-publications/publications/t4037/capital-gains.html",
       "accessedOn": "2026-03-31"
+    },
+    {
+      "label": "CRA - Line 12100 interest and other investment income",
+      "url": "https://www.canada.ca/en/revenue-agency/services/tax/individuals/topics/about-your-tax-return/tax-return/completing-a-tax-return/personal-income/line-12100-interest-other-investment-income.html",
+      "accessedOn": "2026-03-31"
     }
   ],
   "cpp": {

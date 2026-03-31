@@ -448,6 +448,46 @@ const taxChecks = [
       );
     },
   },
+  {
+    id: "T12",
+    label: "Explicit taxable-account interest income flows into cash and tax",
+    check() {
+      const baseInput = readJson(
+        "data/fixtures/taxable-account/on-taxable-missing-acb.json",
+      );
+      const interestInput = readJson(
+        "data/fixtures/taxable-account/on-taxable-missing-acb.json",
+      );
+      interestInput.household.primary.taxableAccountTaxProfile = {
+        annualInterestIncome: 30000,
+      };
+      interestInput.household.expenseProfile.desiredAfterTaxSpending = 30000;
+
+      const baseResult = simulateRetirementPlan(baseInput, rules);
+      const interestResult = simulateRetirementPlan(interestInput, rules);
+      const baseYear = baseResult.years[0];
+      const interestYear = interestResult.years[0];
+
+      assert(
+        interestYear.otherPlannedIncome >= 30000,
+        "Explicit taxable-account interest income should appear in other planned income.",
+      );
+      assert(
+        interestYear.taxes > baseYear.taxes,
+        "Explicit taxable-account interest income should increase first-year tax.",
+      );
+      assert(
+        interestYear.taxableWithdrawals < baseYear.taxableWithdrawals,
+        "Explicit taxable-account interest income should reduce the need for taxable withdrawals.",
+      );
+      assert(
+        interestYear.warnings.some((warning) =>
+          warning.includes("explicit annual cash distribution"),
+        ),
+        "Interest-income scenario should warn about possible return double counting.",
+      );
+    },
+  },
 ];
 
 for (const check of taxChecks) {

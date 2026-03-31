@@ -1691,7 +1691,8 @@ function estimateOtherPlannedIncome(
   return (
     estimateScheduledCashFlowTotal(member.annuityIncome, age) +
     estimateScheduledCashFlowTotal(member.rentalIncome, age) +
-    estimateScheduledCashFlowTotal(member.foreignPensionIncome, age)
+    estimateScheduledCashFlowTotal(member.foreignPensionIncome, age) +
+    (member.taxableAccountTaxProfile?.annualInterestIncome ?? 0)
   );
 }
 
@@ -2271,7 +2272,7 @@ function buildYearWarnings(
 
     if ((frame.member.taxableAccountTaxProfile?.annualInterestIncome ?? 0) > 0) {
       warnings.push(
-        "Standalone taxable-account interest income is not yet modeled separately from portfolio growth. Keep that amount in other planned income until the return-character engine is added.",
+        "Taxable-account interest income is being modeled as an explicit annual cash distribution. Make sure the portfolio return assumption excludes the same yield to avoid double counting.",
       );
     }
   }
@@ -2313,7 +2314,7 @@ function buildAssumptionList(context: NormalizedContext): string[] {
     "OAS recovery tax is estimated with prior-year threshold mapping and capped by modeled OAS income.",
     "Drawdown currently supports a practical blended heuristic, not full optimization.",
     "Locked-in accounts now support baseline LIRA-to-LIF conversion, RRIF-style minimums, and jurisdiction-aware fallback maximums, with manual annual overrides preferred when available.",
-    "Non-registered withdrawals now track adjusted cost base and realize taxable capital gains using the baseline Canadian inclusion rate, but dividend, interest, and capital-loss carryforward character remains incomplete.",
+    "Non-registered withdrawals now track adjusted cost base and realize taxable capital gains using the baseline Canadian inclusion rate, while explicit taxable-account interest can be modeled as annual cash income. Dividend character and capital-loss carryforward handling remain incomplete.",
     "Pension splitting currently uses an annual household heuristic on planned eligible pension income before discretionary registered drawdown.",
     "Immigrant and partial-benefit support is modeled through statement, manual, residence-year, and foreign-pension inputs.",
   ];
