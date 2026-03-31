@@ -139,6 +139,7 @@ export interface AnnualContributionPlan {
 
 export interface ExpenseProfile {
   desiredAfterTaxSpending: number;
+  survivorSpendingPercentOfCouple?: number;
   housing: number;
   utilities: number;
   food: number;

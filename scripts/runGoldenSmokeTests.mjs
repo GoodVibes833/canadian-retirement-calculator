@@ -1164,6 +1164,33 @@ const taxChecks = [
       );
     },
   },
+  {
+    id: "T34",
+    label: "Survivor spending override changes post-death spending needs",
+    check() {
+      const defaultInput = readJson("data/fixtures/golden/golden-on-rrif-couple.json");
+      const reducedInput = readJson("data/fixtures/golden/golden-on-rrif-couple.json");
+      defaultInput.household.primary.profile.lifeExpectancy = 71;
+      reducedInput.household.primary.profile.lifeExpectancy = 71;
+      reducedInput.household.expenseProfile.survivorSpendingPercentOfCouple = 0.6;
+
+      const defaultResult = simulateRetirementPlan(defaultInput, rules);
+      const reducedResult = simulateRetirementPlan(reducedInput, rules);
+      const defaultYear = defaultResult.years[0];
+      const reducedYear = reducedResult.years[0];
+
+      assert(
+        reducedYear.spending < defaultYear.spending,
+        "An explicit survivor spending override should reduce modeled survivor-year spending when the override is below the default 72% assumption.",
+      );
+      assert(
+        defaultYear.warnings.some((warning) =>
+          warning.includes("baseline 72%"),
+        ),
+        "Default survivor-year path should warn when it is using the baseline 72% spending assumption.",
+      );
+    },
+  },
 ];
 
 for (const check of taxChecks) {

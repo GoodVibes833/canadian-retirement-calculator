@@ -2624,7 +2624,9 @@ function estimateSpending(
   }
 
   if (context.input.household.householdType !== "single" && livingMembers === 1) {
-    spending *= 0.72;
+    spending *= clampRate(
+      expenseProfile.survivorSpendingPercentOfCouple ?? 0.72,
+    );
   }
 
   return spending;
@@ -3237,6 +3239,12 @@ function buildYearWarnings(
     warnings.push(
       "Survivor years currently use baseline spousal rollover, DB continuation, and partial CPP/QPP survivor-pension support. Estate taxes, probate effects, and full combined-benefit math are still incomplete.",
     );
+
+    if (context.input.household.expenseProfile.survivorSpendingPercentOfCouple === undefined) {
+      warnings.push(
+        "Survivor-year spending is using the baseline 72% couple-to-single spending assumption. Add expenseProfile.survivorSpendingPercentOfCouple when you want an explicit survivor spending path.",
+      );
+    }
   }
 
   for (const frame of memberFrames) {
@@ -3377,6 +3385,7 @@ function buildAssumptionList(context: NormalizedContext): string[] {
     "Immigrant and partial-benefit support is modeled through statement, manual, residence-year, and foreign-pension inputs.",
     "GIS / Allowance now use a baseline current-year income proxy with a work-income exemption and published annual cutoffs, but exact prior-year Service Canada reassessment timing and quarterly SG3-3 tables are not yet replicated.",
     "Survivor years now include baseline CPP/QPP survivor-pension support when the surviving spouse is not already on a combined public-pension path or when a manual annual survivor-benefit override is supplied, but full Service Canada / Retraite Quebec combined-benefit math remains incomplete.",
+    "Survivor-year spending defaults to 72% of the couple after-tax spending target unless expenseProfile.survivorSpendingPercentOfCouple is explicitly provided.",
   ];
 }
 
@@ -3570,5 +3579,5 @@ function labelForSlot(slot: MemberSlot): string {
 }
 
 function clampRate(value: number): number {
-  return Math.min(0.6, Math.max(0, value));
+  return Math.min(1, Math.max(0, value));
 }
