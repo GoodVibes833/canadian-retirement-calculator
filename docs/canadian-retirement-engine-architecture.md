@@ -121,7 +121,8 @@ Responsibilities:
 - baseline taxable-account ACB and realized capital-gain treatment,
 - baseline taxable-account interest and Canadian dividend character treatment,
 - baseline return-of-capital handling and foreign-dividend ordinary-income treatment,
-- later foreign tax credits, return-of-capital market-value effects, and capital-loss carryforward treatment.
+- baseline federal foreign tax credit approximation for foreign non-business income,
+- later provincial foreign tax credits, return-of-capital market-value effects, and capital-loss carryforward treatment.
 
 ### 5.6 Reporting Module
 
@@ -157,7 +158,7 @@ The scaffold is intentionally incomplete in these areas:
 
 - taxes now use a 2026 federal and province-aware scaffold for ON, BC, AB, and QC, including basic personal, age, and pension-income credits for federal / ON / BC / AB and a partial Quebec path,
 - RRIF minimum withdrawals are modeled, and locked-in accounts now support baseline LIRA-to-LIF conversion plus ON / BC / AB fallback LIF guardrails with Quebec warning-heavy partial support,
-- non-registered withdrawals now track adjusted cost base and realize taxable capital gains using the ruleset inclusion rate, while explicit taxable-account interest, foreign dividends, Canadian eligible / non-eligible dividends, and return-of-capital cash distributions can be modeled annually; the engine still warns heavily when ACB is missing and does not yet model foreign tax credits, return-of-capital market-value effects, or capital-loss carryforwards,
+- non-registered withdrawals now track adjusted cost base and realize taxable capital gains using the ruleset inclusion rate, while explicit taxable-account interest, foreign dividends, Canadian eligible / non-eligible dividends, and return-of-capital cash distributions can be modeled annually; a baseline federal foreign tax credit approximation is now supported for foreign non-business income, while provincial foreign tax credits, return-of-capital market-value effects, and capital-loss carryforwards remain incomplete,
 - GIS is not calculated,
 - pension splitting now uses an annual heuristic on planned eligible pension income before discretionary drawdown, not a full lifetime optimization,
 - spouse-aware survivor logic now includes a baseline spousal asset rollover and defined-benefit survivor continuation, but still omits CPP survivor pension and estate-tax effects,
@@ -169,7 +170,7 @@ The scaffold is intentionally incomplete in these areas:
 Recommended order from here:
 
 1. Replace locked-in fallback maximums with more exact institution-style annual calculations and fuller Alberta / BC formulas.
-2. Add foreign tax credits plus return-of-capital market-value handling and capital-loss ledger depth for taxable accounts.
+2. Add provincial foreign tax credits plus return-of-capital market-value handling and capital-loss ledger depth for taxable accounts.
 3. Deepen Quebec-specific QPP, FRV, and tax-path behavior.
 4. Add GIS and Allowance.
 5. Add fuller survivor modeling including CPP survivor pension and death-year tax handling.

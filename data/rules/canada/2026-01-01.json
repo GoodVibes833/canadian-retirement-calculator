@@ -76,6 +76,16 @@
       "label": "CRA - Tax treatment of mutual funds",
       "url": "https://www.canada.ca/en/revenue-agency/services/tax/individuals/topics/about-your-tax-return/tax-return/completing-a-tax-return/personal-income/line-12700-capital-gains/completing-schedule-3/tax-treatment-mutual-funds.html",
       "accessedOn": "2026-03-31"
+    },
+    {
+      "label": "CRA - Line 40500 federal foreign tax credit",
+      "url": "https://www.canada.ca/en/revenue-agency/services/tax/individuals/topics/about-your-tax-return/tax-return/completing-a-tax-return/deductions-credits-expenses/line-40500-federal-foreign-tax-credit.html",
+      "accessedOn": "2026-03-31"
+    },
+    {
+      "label": "CRA - Income Tax Folio S5-F2-C1 Foreign Tax Credit",
+      "url": "https://www.canada.ca/en/revenue-agency/services/tax/technical-information/income-tax/income-tax-folios-index/series-5-international-residency/folio-2-foreign-tax-credits-deductions/income-tax-folio-s5-f2-c1-foreign-tax-credit.html",
+      "accessedOn": "2026-03-31"
     }
   ],
   "cpp": {

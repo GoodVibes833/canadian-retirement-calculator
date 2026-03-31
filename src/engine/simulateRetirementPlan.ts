@@ -71,6 +71,7 @@ interface MemberFrame {
   eligibleDividendIncome: number;
   nonEligibleDividendIncome: number;
   foreignDividendIncome: number;
+  foreignNonBusinessIncomeTaxPaid: number;
   returnOfCapitalDistribution: number;
   deemedCapitalGainFromReturnOfCapital: number;
   taxableCapitalGainFromReturnOfCapital: number;
@@ -90,6 +91,8 @@ interface MemberTaxState {
   pensionIncomeSplitOut: number;
   eligibleDividendIncome: number;
   nonEligibleDividendIncome: number;
+  foreignNonBusinessIncome: number;
+  foreignNonBusinessIncomeTaxPaid: number;
   realizedCapitalGains: number;
   taxableCapitalGains: number;
   warnings: string[];
@@ -486,6 +489,8 @@ function buildMemberFrames(
         member.taxableAccountTaxProfile?.annualNonEligibleDividendIncome ?? 0,
       foreignDividendIncome:
         member.taxableAccountTaxProfile?.annualForeignDividendIncome ?? 0,
+      foreignNonBusinessIncomeTaxPaid:
+        member.taxableAccountTaxProfile?.annualForeignNonBusinessIncomeTaxPaid ?? 0,
       returnOfCapitalDistribution:
         member.taxableAccountTaxProfile?.annualReturnOfCapitalDistribution ?? 0,
       deemedCapitalGainFromReturnOfCapital: 0,
@@ -879,6 +884,9 @@ function buildBaseTaxState(
       pensionIncomeSplitOut: 0,
       eligibleDividendIncome: frame.eligibleDividendIncome,
       nonEligibleDividendIncome: frame.nonEligibleDividendIncome,
+      foreignNonBusinessIncome:
+        frame.foreignDividendIncome + frame.foreignPensionIncome,
+      foreignNonBusinessIncomeTaxPaid: frame.foreignNonBusinessIncomeTaxPaid,
       realizedCapitalGains: frame.deemedCapitalGainFromReturnOfCapital,
       taxableCapitalGains: frame.taxableCapitalGainFromReturnOfCapital,
       warnings: [],
@@ -930,6 +938,8 @@ function finalizeMemberTaxState(
       eligiblePensionIncome: memberState.eligiblePensionIncome,
       eligibleDividendIncome: memberState.eligibleDividendIncome,
       nonEligibleDividendIncome: memberState.nonEligibleDividendIncome,
+      foreignNonBusinessIncome: memberState.foreignNonBusinessIncome,
+      foreignNonBusinessIncomeTaxPaid: memberState.foreignNonBusinessIncomeTaxPaid,
     });
 
     memberState.taxes = taxEstimate.totalTax;
@@ -1220,6 +1230,8 @@ function executeDrawdown(
           eligiblePensionIncome: taxState.eligiblePensionIncome,
           eligibleDividendIncome: taxState.eligibleDividendIncome,
           nonEligibleDividendIncome: taxState.nonEligibleDividendIncome,
+          foreignNonBusinessIncome: taxState.foreignNonBusinessIncome,
+          foreignNonBusinessIncomeTaxPaid: taxState.foreignNonBusinessIncomeTaxPaid,
         });
 
         taxState.taxes = updatedTaxEstimate.totalTax;
@@ -1314,6 +1326,8 @@ function executeDrawdown(
           eligiblePensionIncome: taxState.eligiblePensionIncome,
           eligibleDividendIncome: taxState.eligibleDividendIncome,
           nonEligibleDividendIncome: taxState.nonEligibleDividendIncome,
+          foreignNonBusinessIncome: taxState.foreignNonBusinessIncome,
+          foreignNonBusinessIncomeTaxPaid: taxState.foreignNonBusinessIncomeTaxPaid,
         });
 
         taxState.taxes = updatedTaxEstimate.totalTax;
@@ -1379,6 +1393,8 @@ function executeDrawdown(
           eligiblePensionIncome: taxState.eligiblePensionIncome,
           eligibleDividendIncome: taxState.eligibleDividendIncome,
           nonEligibleDividendIncome: taxState.nonEligibleDividendIncome,
+          foreignNonBusinessIncome: taxState.foreignNonBusinessIncome,
+          foreignNonBusinessIncomeTaxPaid: taxState.foreignNonBusinessIncomeTaxPaid,
         });
 
         taxState.taxes = updatedTaxEstimate.totalTax;
@@ -1964,6 +1980,8 @@ function estimateNetFromRegisteredWithdrawal(
     eligiblePensionIncome: updatedEligiblePensionIncome,
     eligibleDividendIncome: taxState.eligibleDividendIncome,
     nonEligibleDividendIncome: taxState.nonEligibleDividendIncome,
+    foreignNonBusinessIncome: taxState.foreignNonBusinessIncome,
+    foreignNonBusinessIncomeTaxPaid: taxState.foreignNonBusinessIncomeTaxPaid,
   }).totalTax;
   const updatedOasRecovery = estimateOasRecoveryTax(
     context,
@@ -2047,6 +2065,8 @@ function estimateNetFromNonRegisteredWithdrawal(
     eligiblePensionIncome: taxState.eligiblePensionIncome,
     eligibleDividendIncome: taxState.eligibleDividendIncome,
     nonEligibleDividendIncome: taxState.nonEligibleDividendIncome,
+    foreignNonBusinessIncome: taxState.foreignNonBusinessIncome,
+    foreignNonBusinessIncomeTaxPaid: taxState.foreignNonBusinessIncomeTaxPaid,
   }).totalTax;
   const updatedOasRecovery = estimateOasRecoveryTax(
     context,
@@ -2418,7 +2438,13 @@ function buildYearWarnings(
 
     if ((frame.member.taxableAccountTaxProfile?.annualForeignDividendIncome ?? 0) > 0) {
       warnings.push(
-        "Foreign dividend income is being modeled as ordinary taxable investment income. Foreign tax credit and withholding-tax recovery are not yet modeled.",
+        "Foreign dividend income is being modeled as ordinary taxable investment income. Federal foreign tax credit support is now baseline-only, while provincial credits and withholding-tax recovery detail are not yet modeled.",
+      );
+    }
+
+    if ((frame.member.taxableAccountTaxProfile?.annualForeignNonBusinessIncomeTaxPaid ?? 0) > 0) {
+      warnings.push(
+        "Foreign tax paid is modeled with a federal-only, single-country foreign tax credit approximation. Provincial foreign tax credits and treaty-specific details are not yet modeled.",
       );
     }
 
@@ -2468,7 +2494,7 @@ function buildAssumptionList(context: NormalizedContext): string[] {
     "OAS recovery tax is estimated with prior-year threshold mapping and capped by modeled OAS income.",
     "Drawdown currently supports a practical blended heuristic, not full optimization.",
     "Locked-in accounts now support baseline LIRA-to-LIF conversion, RRIF-style minimums, and jurisdiction-aware fallback maximums, with manual annual overrides preferred when available.",
-    "Non-registered withdrawals now track adjusted cost base and realize taxable capital gains using the baseline Canadian inclusion rate, while explicit taxable-account interest, foreign dividends, Canadian eligible / non-eligible dividends, and return-of-capital cash distributions can be modeled annually. Foreign tax credits, return-of-capital market-value effects, and capital-loss carryforward handling remain incomplete.",
+    "Non-registered withdrawals now track adjusted cost base and realize taxable capital gains using the baseline Canadian inclusion rate, while explicit taxable-account interest, foreign dividends, Canadian eligible / non-eligible dividends, and return-of-capital cash distributions can be modeled annually. A baseline federal foreign tax credit approximation is now supported for foreign non-business income, while provincial credits, return-of-capital market-value effects, and capital-loss carryforward handling remain incomplete.",
     "Pension splitting currently uses an annual household heuristic on planned eligible pension income before discretionary registered drawdown.",
     "Immigrant and partial-benefit support is modeled through statement, manual, residence-year, and foreign-pension inputs.",
   ];

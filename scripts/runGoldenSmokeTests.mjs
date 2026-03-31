@@ -639,7 +639,75 @@ const taxChecks = [
         foreignYear.warnings.some((warning) =>
           warning.includes("Foreign dividend income is being modeled"),
         ),
-        "Foreign-dividend scenario should warn that foreign tax credits are not yet modeled.",
+        "Foreign-dividend scenario should surface the baseline foreign-dividend warning.",
+      );
+    },
+  },
+  {
+    id: "T17",
+    label: "Federal foreign tax credit reduces tax on foreign non-business income",
+    check() {
+      const withoutCredit = estimateIncomeTax({
+        taxableIncome: 70000,
+        province: "ON",
+        calendarYear: 2026,
+        age: 65,
+        foreignNonBusinessIncome: 10000,
+      });
+      const withCredit = estimateIncomeTax({
+        taxableIncome: 70000,
+        province: "ON",
+        calendarYear: 2026,
+        age: 65,
+        foreignNonBusinessIncome: 10000,
+        foreignNonBusinessIncomeTaxPaid: 1500,
+      });
+
+      assert(
+        withCredit.totalTax < withoutCredit.totalTax,
+        "Foreign tax credit should reduce total tax when foreign non-business tax has already been paid.",
+      );
+      assert(
+        withCredit.federalForeignTaxCredit > 0,
+        "Foreign tax credit amount should be positive when eligible foreign tax is provided.",
+      );
+      assert(
+        withCredit.warnings.some((warning) =>
+          warning.includes("federal-only, single-country approximation"),
+        ),
+        "Foreign tax credit scenario should warn that only the baseline federal approximation is modeled.",
+      );
+    },
+  },
+  {
+    id: "T18",
+    label: "Foreign tax credit lowers taxes in the foreign-dividend household scenario",
+    check() {
+      const baseInput = readJson(
+        "data/fixtures/taxable-account/on-taxable-foreign-dividend.json",
+      );
+      const creditedInput = readJson(
+        "data/fixtures/taxable-account/on-taxable-foreign-dividend-tax-paid.json",
+      );
+
+      const baseResult = simulateRetirementPlan(baseInput, rules);
+      const creditedResult = simulateRetirementPlan(creditedInput, rules);
+      const baseYear = baseResult.years[0];
+      const creditedYear = creditedResult.years[0];
+
+      assert(
+        creditedYear.taxes < baseYear.taxes,
+        "Foreign tax credit should reduce modeled household taxes when foreign withholding tax is provided.",
+      );
+      assert(
+        creditedYear.otherPlannedIncome === baseYear.otherPlannedIncome,
+        "Foreign tax credit should change taxes, not cash income itself.",
+      );
+      assert(
+        creditedYear.warnings.some((warning) =>
+          warning.includes("federal-only, single-country foreign tax credit approximation"),
+        ),
+        "Credited foreign-dividend scenario should warn that the foreign tax credit is still baseline-only.",
       );
     },
   },

@@ -97,6 +97,7 @@ export interface TaxableAccountTaxProfile {
   annualEligibleDividendIncome?: number;
   annualNonEligibleDividendIncome?: number;
   annualForeignDividendIncome?: number;
+  annualForeignNonBusinessIncomeTaxPaid?: number;
   annualReturnOfCapitalDistribution?: number;
   notes?: string;
 }

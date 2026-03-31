@@ -34,6 +34,8 @@ export interface TaxEstimateInput {
   eligiblePensionIncome?: number;
   eligibleDividendIncome?: number;
   nonEligibleDividendIncome?: number;
+  foreignNonBusinessIncome?: number;
+  foreignNonBusinessIncomeTaxPaid?: number;
 }
 
 export interface TaxEstimateResult {
@@ -41,6 +43,7 @@ export interface TaxEstimateResult {
   provincialTax: number;
   totalTax: number;
   marginalRate: number;
+  federalForeignTaxCredit: number;
   warnings: string[];
 }
 
@@ -224,6 +227,7 @@ export function estimateIncomeTax(
     provincialTax: internal.provincialTax,
     totalTax: internal.totalTax,
     marginalRate,
+    federalForeignTaxCredit: internal.federalForeignTaxCredit,
     warnings,
   };
 }
@@ -264,14 +268,38 @@ function estimateIncomeTaxInternal(
   const warnings: string[] = [];
   const federalBasicTax = applyProgressiveTax(taxableIncome, FEDERAL_2026);
   const federalCredits = calculateFederalCredits(input);
-  let federalTax = Math.max(0, federalBasicTax - federalCredits);
+  let federalTaxBeforeForeignTaxCredit = Math.max(0, federalBasicTax - federalCredits);
 
   if (input.province === "QC") {
-    federalTax *= 1 - 0.165;
+    federalTaxBeforeForeignTaxCredit *= 1 - 0.165;
   }
+
+  const federalForeignTaxCredit = calculateFederalForeignTaxCredit(
+    input,
+    federalTaxBeforeForeignTaxCredit,
+  );
+  const federalTax = Math.max(
+    0,
+    federalTaxBeforeForeignTaxCredit - federalForeignTaxCredit,
+  );
 
   const provincialTaxResult = calculateProvincialTax(input);
   warnings.push(...provincialTaxResult.warnings);
+
+  if ((input.foreignNonBusinessIncomeTaxPaid ?? 0) > 0) {
+    warnings.push(
+      "Foreign tax credit currently uses a federal-only, single-country approximation for foreign non-business income. Provincial foreign tax credits are not yet modeled.",
+    );
+  }
+
+  if (
+    (input.foreignNonBusinessIncomeTaxPaid ?? 0) > 0 &&
+    Math.max(0, input.foreignNonBusinessIncome ?? 0) <= 0
+  ) {
+    warnings.push(
+      "Foreign tax paid was provided without modeled foreign non-business income, so no foreign tax credit was applied.",
+    );
+  }
 
   if (input.province === "QC") {
     warnings.push(
@@ -281,6 +309,7 @@ function estimateIncomeTaxInternal(
 
   return {
     federalTax,
+    federalForeignTaxCredit,
     provincialTax: provincialTaxResult.provincialTax,
     totalTax: federalTax + provincialTaxResult.provincialTax,
     warnings,
@@ -378,6 +407,29 @@ function calculateProvincialDividendCredit(
     Math.max(0, input.nonEligibleDividendIncome ?? 0) *
       (dividendCredit.nonEligibleActualRate ?? 0)
   );
+}
+
+function calculateFederalForeignTaxCredit(
+  input: TaxEstimateInput,
+  federalTaxBeforeForeignTaxCredit: number,
+): number {
+  const foreignIncome = Math.max(0, input.foreignNonBusinessIncome ?? 0);
+  const foreignTaxPaid = Math.max(0, input.foreignNonBusinessIncomeTaxPaid ?? 0);
+  const taxableIncome = Math.max(0, input.taxableIncome);
+
+  if (
+    foreignIncome <= 0 ||
+    foreignTaxPaid <= 0 ||
+    taxableIncome <= 0 ||
+    federalTaxBeforeForeignTaxCredit <= 0
+  ) {
+    return 0;
+  }
+
+  const maximumIncomeShare = Math.min(1, foreignIncome / taxableIncome);
+  const maximumCredit = federalTaxBeforeForeignTaxCredit * maximumIncomeShare;
+
+  return Math.min(foreignTaxPaid, maximumCredit);
 }
 
 function resolveEligibleDividendTaxableAmount(
