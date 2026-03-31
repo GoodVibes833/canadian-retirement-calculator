@@ -146,6 +146,14 @@ export interface JointOwnershipProfile {
   cashJointWithSurvivingSpousePercent?: number;
 }
 
+export interface IncomeTestedBenefitsBaseIncome {
+  primaryAssessableIncome?: number;
+  partnerAssessableIncome?: number;
+  combinedAssessableIncome?: number;
+  calendarYear?: number;
+  notes?: string;
+}
+
 export interface AnnualContributionPlan {
   rrsp: number;
   tfsa: number;
@@ -218,6 +226,7 @@ export interface HouseholdInput {
   oasClawbackAwareMode: boolean;
   gisModelingEnabled: boolean;
   expenseProfile: ExpenseProfile;
+  incomeTestedBenefitsBaseIncome?: IncomeTestedBenefitsBaseIncome;
   oneTimeEvents: OneTimeEvent[];
   customWithdrawalOrder?: string[];
   projectionStartYear: number;

@@ -150,10 +150,19 @@ interface IncomeTestedBenefitProjection {
   warnings: string[];
 }
 
+interface IncomeTestedBenefitAssessableIncomeState {
+  calendarYear: number;
+  primaryAssessableIncome: number;
+  partnerAssessableIncome?: number;
+  combinedAssessableIncome: number;
+  seededFromInput: boolean;
+}
+
 interface SingleYearProjection {
   output: ProjectionYear;
   nextBalances: HouseholdLedger;
   nextTaxAttributes: HouseholdTaxAttributeLedger;
+  nextIncomeTestedBenefitAssessableIncomeState: IncomeTestedBenefitAssessableIncomeState;
 }
 
 interface TerminalEstateEstimate {
@@ -218,6 +227,8 @@ export function simulateRetirementPlan(
   const timeline = buildAnnualTimeline(context);
   let balances = initializeHouseholdLedger(context.input);
   let taxAttributes = initializeHouseholdTaxAttributeLedger(context.input);
+  let incomeTestedBenefitAssessableIncomeState =
+    initializeIncomeTestedBenefitAssessableIncomeState(context.input);
   const years: ProjectionYear[] = [];
 
   for (const period of timeline) {
@@ -226,10 +237,13 @@ export function simulateRetirementPlan(
       period,
       balances,
       taxAttributes,
+      incomeTestedBenefitAssessableIncomeState,
     );
     years.push(projectedYear.output);
     balances = projectedYear.nextBalances;
     taxAttributes = projectedYear.nextTaxAttributes;
+    incomeTestedBenefitAssessableIncomeState =
+      projectedYear.nextIncomeTestedBenefitAssessableIncomeState;
   }
 
   const summary = summarizeProjection(context, years, balances, taxAttributes);
@@ -338,6 +352,7 @@ function projectSingleYear(
   period: PeriodState,
   openingBalances: HouseholdLedger,
   openingTaxAttributes: HouseholdTaxAttributeLedger,
+  incomeTestedBenefitAssessableIncomeState: IncomeTestedBenefitAssessableIncomeState | undefined,
 ): SingleYearProjection {
   let balances = cloneHouseholdLedger(openingBalances);
   const taxAttributes = cloneHouseholdTaxAttributeLedger(openingTaxAttributes);
@@ -400,6 +415,7 @@ function projectSingleYear(
     balances,
     memberTaxState,
     lockedInAnnualLimits,
+    incomeTestedBenefitAssessableIncomeState,
     baseAfterTaxCash,
     requiredCash,
   );
@@ -601,6 +617,12 @@ function projectSingleYear(
       memberTaxState,
       openingTaxAttributes,
     ),
+    nextIncomeTestedBenefitAssessableIncomeState:
+      buildNextIncomeTestedBenefitAssessableIncomeState(
+        period,
+        memberFrames,
+        memberTaxState,
+      ),
   };
 }
 
@@ -627,6 +649,41 @@ function initializeHouseholdTaxAttributeLedger(
               ?.initialNetCapitalLossCarryforward ?? 0,
         }
       : undefined,
+  };
+}
+
+function initializeIncomeTestedBenefitAssessableIncomeState(
+  input: SimulationInput,
+): IncomeTestedBenefitAssessableIncomeState | undefined {
+  const baseIncome = input.household.incomeTestedBenefitsBaseIncome;
+
+  if (
+    baseIncome?.primaryAssessableIncome === undefined &&
+    baseIncome?.partnerAssessableIncome === undefined &&
+    baseIncome?.combinedAssessableIncome === undefined
+  ) {
+    return undefined;
+  }
+
+  const primaryAssessableIncome = Math.max(
+    0,
+    baseIncome?.primaryAssessableIncome ?? 0,
+  );
+  const partnerAssessableIncome = input.household.partner
+    ? Math.max(0, baseIncome?.partnerAssessableIncome ?? 0)
+    : undefined;
+  const combinedAssessableIncome = Math.max(
+    0,
+    baseIncome?.combinedAssessableIncome ??
+      (primaryAssessableIncome + (partnerAssessableIncome ?? 0)),
+  );
+
+  return {
+    calendarYear: baseIncome?.calendarYear ?? input.household.projectionStartYear - 1,
+    primaryAssessableIncome,
+    partnerAssessableIncome,
+    combinedAssessableIncome,
+    seededFromInput: true,
   };
 }
 
@@ -1406,6 +1463,7 @@ function resolveDrawdownAndIncomeTestedBenefits(
   baseBalances: HouseholdLedger,
   baseTaxState: Partial<Record<MemberSlot, MemberTaxState>>,
   lockedInAnnualLimits: Partial<Record<MemberSlot, LockedInAnnualLimitState>>,
+  incomeTestedBenefitAssessableIncomeState: IncomeTestedBenefitAssessableIncomeState | undefined,
   baseAfterTaxCash: number,
   requiredCash: number,
 ): {
@@ -1414,19 +1472,29 @@ function resolveDrawdownAndIncomeTestedBenefits(
   drawdown: DrawdownResult;
   incomeTestedBenefits: IncomeTestedBenefitProjection;
 } {
-  let estimatedBenefitCash = 0;
   let finalBalances = cloneHouseholdLedger(baseBalances);
   let finalTaxState = cloneMemberTaxState(baseTaxState);
   let finalDrawdown = createEmptyDrawdownResult();
   let finalBenefitProjection = createEmptyIncomeTestedBenefitProjection();
-  const iterationCount = context.input.household.gisModelingEnabled ? 2 : 1;
+  let estimatedBenefitCash = 0;
 
-  for (let iteration = 0; iteration < iterationCount; iteration += 1) {
+  const hasPriorYearAssessableIncome =
+    incomeTestedBenefitAssessableIncomeState !== undefined;
+
+  if (context.input.household.gisModelingEnabled && hasPriorYearAssessableIncome) {
+    finalBenefitProjection = estimateIncomeTestedBenefits(
+      context,
+      memberFrames,
+      baseTaxState,
+      incomeTestedBenefitAssessableIncomeState,
+      false,
+    );
+    estimatedBenefitCash = finalBenefitProjection.totalAnnual;
     const workingBalances = cloneHouseholdLedger(baseBalances);
     const workingTaxState = cloneMemberTaxState(baseTaxState);
     const workingLockedInAnnualLimits = cloneLockedInAnnualLimits(lockedInAnnualLimits);
     const gap = Math.max(0, requiredCash - (baseAfterTaxCash + estimatedBenefitCash));
-    const drawdown = executeDrawdown(
+    finalDrawdown = executeDrawdown(
       context,
       period,
       memberFrames,
@@ -1435,23 +1503,55 @@ function resolveDrawdownAndIncomeTestedBenefits(
       workingLockedInAnnualLimits,
       gap,
     );
-    const incomeTestedBenefits = context.input.household.gisModelingEnabled
-      ? estimateIncomeTestedBenefits(context, memberFrames, workingTaxState)
-      : createEmptyIncomeTestedBenefitProjection();
-
     finalBalances = workingBalances;
     finalTaxState = workingTaxState;
-    finalDrawdown = drawdown;
-    finalBenefitProjection = incomeTestedBenefits;
+  } else {
+    let fallbackEstimatedBenefitCash = 0;
+    const iterationCount = context.input.household.gisModelingEnabled ? 2 : 1;
 
-    if (
-      !context.input.household.gisModelingEnabled ||
-      Math.abs(incomeTestedBenefits.totalAnnual - estimatedBenefitCash) < 1
-    ) {
-      break;
+    for (let iteration = 0; iteration < iterationCount; iteration += 1) {
+      const workingBalances = cloneHouseholdLedger(baseBalances);
+      const workingTaxState = cloneMemberTaxState(baseTaxState);
+      const workingLockedInAnnualLimits = cloneLockedInAnnualLimits(
+        lockedInAnnualLimits,
+      );
+      const gap = Math.max(
+        0,
+        requiredCash - (baseAfterTaxCash + fallbackEstimatedBenefitCash),
+      );
+      const drawdown = executeDrawdown(
+        context,
+        period,
+        memberFrames,
+        workingBalances,
+        workingTaxState,
+        workingLockedInAnnualLimits,
+        gap,
+      );
+      const incomeTestedBenefits = context.input.household.gisModelingEnabled
+        ? estimateIncomeTestedBenefits(
+            context,
+            memberFrames,
+            workingTaxState,
+            undefined,
+            true,
+          )
+        : createEmptyIncomeTestedBenefitProjection();
+
+      finalBalances = workingBalances;
+      finalTaxState = workingTaxState;
+      finalDrawdown = drawdown;
+      finalBenefitProjection = incomeTestedBenefits;
+
+      if (
+        !context.input.household.gisModelingEnabled ||
+        Math.abs(incomeTestedBenefits.totalAnnual - fallbackEstimatedBenefitCash) < 1
+      ) {
+        break;
+      }
+
+      fallbackEstimatedBenefitCash = incomeTestedBenefits.totalAnnual;
     }
-
-    estimatedBenefitCash = incomeTestedBenefits.totalAnnual;
   }
 
   return {
@@ -1466,12 +1566,28 @@ function estimateIncomeTestedBenefits(
   context: NormalizedContext,
   memberFrames: MemberFrame[],
   memberTaxState: Partial<Record<MemberSlot, MemberTaxState>>,
+  priorYearAssessableIncomeState: IncomeTestedBenefitAssessableIncomeState | undefined,
+  usingCurrentYearFallback: boolean,
 ): IncomeTestedBenefitProjection {
   const warnings = [
-    "GIS / Allowance baseline uses a current-year income proxy instead of Service Canada's prior-year and reassessment process.",
     "GIS / Allowance baseline uses a linear taper to the published annual cutoffs, not an exact quarterly SG3-3 table lookup or top-up formula.",
     "GIS / Allowance baseline applies the work-income exemption to modeled employment income only and does not yet capture every line-23600 adjustment.",
   ];
+  if (usingCurrentYearFallback) {
+    warnings.unshift(
+      "GIS / Allowance first-year baseline is using a current-year income proxy because no prior-year assessable-income seed was supplied. Add household.incomeTestedBenefitsBaseIncome when you want the first projection year to reflect the actual prior tax year.",
+    );
+  } else {
+    const sourceYear = priorYearAssessableIncomeState?.calendarYear;
+    warnings.unshift(
+      `GIS / Allowance baseline is using prior-year assessable income from ${sourceYear ?? "the prior calendar year"}, which is closer to Service Canada's normal July-to-June payment logic.`,
+    );
+    if (priorYearAssessableIncomeState?.seededFromInput) {
+      warnings.push(
+        "The first projection year is using a user-supplied prior-year GIS / Allowance income seed rather than inferring that value from the current simulation year.",
+      );
+    }
+  }
   const livingFrames = memberFrames.filter((frame) => frame.isAlive);
 
   if (livingFrames.length === 0) {
@@ -1487,10 +1603,12 @@ function estimateIncomeTestedBenefits(
       continue;
     }
 
-    assessableIncomeBySlot[frame.slot] = resolveIncomeTestedBenefitAssessableIncome(
-      frame,
-      state,
-    );
+    assessableIncomeBySlot[frame.slot] = usingCurrentYearFallback
+      ? resolveIncomeTestedBenefitAssessableIncome(frame, state)
+      : resolvePriorYearAssessableIncomeBySlot(
+          frame.slot,
+          priorYearAssessableIncomeState,
+        );
   }
 
   const oasRecipients = livingFrames.filter(
@@ -1526,10 +1644,15 @@ function estimateIncomeTestedBenefits(
       );
     }
   } else {
-    const combinedAssessableIncome = livingFrames.reduce(
-      (sum, frame) => sum + (assessableIncomeBySlot[frame.slot] ?? 0),
-      0,
-    );
+    const combinedAssessableIncome = usingCurrentYearFallback
+      ? livingFrames.reduce(
+          (sum, frame) => sum + (assessableIncomeBySlot[frame.slot] ?? 0),
+          0,
+        )
+      : resolvePriorYearCombinedAssessableIncome(
+          priorYearAssessableIncomeState,
+          livingFrames,
+        );
     const partnerWithoutOas = livingFrames.find(
       (frame) => !(frame.age >= 65 && frame.oasIncome > 0),
     );
@@ -1574,6 +1697,62 @@ function estimateIncomeTestedBenefits(
     totalAnnual: roundCurrency(gisAnnual + allowanceAnnual + allowanceSurvivorAnnual),
     warnings,
   };
+}
+
+function buildNextIncomeTestedBenefitAssessableIncomeState(
+  period: PeriodState,
+  memberFrames: MemberFrame[],
+  memberTaxState: Partial<Record<MemberSlot, MemberTaxState>>,
+): IncomeTestedBenefitAssessableIncomeState {
+  const primaryFrame = memberFrames.find((frame) => frame.slot === "primary");
+  const partnerFrame = memberFrames.find((frame) => frame.slot === "partner");
+  const primaryAssessableIncome =
+    primaryFrame && memberTaxState.primary
+      ? resolveIncomeTestedBenefitAssessableIncome(
+          primaryFrame,
+          memberTaxState.primary,
+        )
+      : 0;
+  const partnerAssessableIncome =
+    partnerFrame && memberTaxState.partner
+      ? resolveIncomeTestedBenefitAssessableIncome(
+          partnerFrame,
+          memberTaxState.partner,
+        )
+      : undefined;
+
+  return {
+    calendarYear: period.calendarYear,
+    primaryAssessableIncome,
+    partnerAssessableIncome,
+    combinedAssessableIncome:
+      primaryAssessableIncome + (partnerAssessableIncome ?? 0),
+    seededFromInput: false,
+  };
+}
+
+function resolvePriorYearAssessableIncomeBySlot(
+  slot: MemberSlot,
+  priorYearAssessableIncomeState: IncomeTestedBenefitAssessableIncomeState | undefined,
+): number {
+  if (!priorYearAssessableIncomeState) {
+    return 0;
+  }
+
+  return slot === "primary"
+    ? priorYearAssessableIncomeState.primaryAssessableIncome
+    : priorYearAssessableIncomeState.partnerAssessableIncome ?? 0;
+}
+
+function resolvePriorYearCombinedAssessableIncome(
+  priorYearAssessableIncomeState: IncomeTestedBenefitAssessableIncomeState | undefined,
+  _livingFrames: MemberFrame[],
+): number {
+  if (!priorYearAssessableIncomeState) {
+    return 0;
+  }
+
+  return priorYearAssessableIncomeState.combinedAssessableIncome;
 }
 
 function resolveIncomeTestedBenefitAssessableIncome(
@@ -4250,7 +4429,7 @@ function buildAssumptionList(context: NormalizedContext): string[] {
     "Pension splitting currently uses an annual household heuristic on planned eligible pension income before discretionary registered drawdown.",
     "QPP delayed-start increases are now baseline-supported through age 72, while early-start QPP reductions use a set-proportion approximation unless a manual start-age amount is provided.",
     "Immigrant and partial-benefit support is modeled through statement, manual, residence-year, and foreign-pension inputs.",
-    "GIS / Allowance now use a baseline current-year income proxy with a work-income exemption and published annual cutoffs, but exact prior-year Service Canada reassessment timing and quarterly SG3-3 tables are not yet replicated.",
+    "GIS / Allowance now use a baseline prior-year assessable-income path with a work-income exemption and published annual cutoffs. The first projection year falls back to a current-year proxy unless household.incomeTestedBenefitsBaseIncome is supplied, and exact Service Canada reassessment timing plus quarterly SG3-3 tables are not yet replicated.",
     "Survivor years now include baseline CPP/QPP survivor-pension support when the surviving spouse is not already on a combined public-pension path or when a manual annual survivor-benefit override is supplied, but full Service Canada / Retraite Quebec combined-benefit math remains incomplete.",
     "Survivor-year spending defaults to 72% of the couple after-tax spending target unless expenseProfile.survivorSpendingPercentOfCouple is explicitly provided.",
     "Death years use a baseline mid-year heuristic: recurring income, contributions, and mandatory RRIF/LIF withdrawals are prorated to 50%, and couple spending transitions halfway toward the survivor spending path for that year.",

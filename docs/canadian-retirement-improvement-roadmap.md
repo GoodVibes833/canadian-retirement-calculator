@@ -205,11 +205,11 @@ Reason:
 
 If we keep building immediately, the best next implementation target is:
 
-1. `R04` GIS / Allowance prior-year logic
+1. `R05` exact LIF formulas
 
 Right behind it:
 
-2. `R05` exact LIF formulas
-3. `R07` Quebec probate / will-form logic
+2. `R07` Quebec probate / will-form logic
+3. `R08` under-65 survivor combined-benefit detail
 
-That trio would make the low-income path, locked-in drawdown, and Quebec estate branch materially more trustworthy very quickly.
+That trio would make locked-in drawdown, Quebec estate branching, and survivor precision materially more trustworthy very quickly.

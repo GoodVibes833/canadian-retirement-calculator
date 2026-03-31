@@ -1665,6 +1665,65 @@ const taxChecks = [
       );
     },
   },
+  {
+    id: "T48",
+    label: "Prior-year GIS seed can suppress the first projection year and release GIS in the next year",
+    check() {
+      const input = readJson("data/fixtures/gis/on-single-gis.json");
+      input.household.incomeTestedBenefitsBaseIncome = {
+        primaryAssessableIncome: 30000,
+        combinedAssessableIncome: 30000,
+        calendarYear: 2025,
+      };
+      input.household.maxProjectionAge = 66;
+
+      const result = simulateRetirementPlan(input, rules);
+      const firstYear = result.years[0];
+      const secondYear = result.years[1];
+
+      assert(
+        firstYear.gisIncome < secondYear.gisIncome,
+        "A high prior-year GIS seed should reduce the first projection year's GIS relative to the next year after the lower current-year income has flowed through the lag.",
+      );
+      assert(
+        secondYear.gisIncome > 0,
+        "The next year should restore GIS once the lower modeled assessable income becomes the prior-year base.",
+      );
+      assert(
+        firstYear.warnings.some((warning) =>
+          warning.includes("prior-year assessable income"),
+        ),
+        "Seeded GIS scenario should warn that benefits are being based on prior-year assessable income rather than the current-year proxy.",
+      );
+    },
+  },
+  {
+    id: "T49",
+    label: "Prior-year Allowance seed delays first-year low-income supplements for a couple",
+    check() {
+      const input = readJson("data/fixtures/gis/on-allowance-couple.json");
+      input.household.incomeTestedBenefitsBaseIncome = {
+        primaryAssessableIncome: 22000,
+        partnerAssessableIncome: 18000,
+        combinedAssessableIncome: 40000,
+        calendarYear: 2025,
+      };
+      input.household.maxProjectionAge = 68;
+
+      const result = simulateRetirementPlan(input, rules);
+      const firstYear = result.years[0];
+      const secondYear = result.years[1];
+
+      assert(
+        firstYear.allowanceIncome < secondYear.allowanceIncome,
+        "A high prior-year income seed should suppress the first year's Allowance relative to the next year in a low-income couple case.",
+      );
+      assert(
+        firstYear.gisIncome < secondYear.gisIncome,
+        "A high prior-year income seed should also suppress the first year's GIS relative to the next year.",
+      );
+    },
+  },
 ];
 
 for (const check of taxChecks) {
