@@ -1,4 +1,5 @@
 import type {
+  BeneficiaryDesignationType,
   HouseholdMemberInput,
   ProvinceCode,
   SimulationInput,
@@ -13,6 +14,7 @@ import type { CanadaRuleSet } from "../rules/types.js";
 import { estimateIncomeTax } from "./tax/estimateIncomeTax.js";
 
 type MemberSlot = "primary" | "partner";
+type RegisteredAccountKey = "rrsp" | "rrif" | "tfsa" | "lira" | "lif" | "dcPension";
 type WithdrawableSource =
   | "cash"
   | "lif"
@@ -722,35 +724,101 @@ function applySurvivorAdjustments(
   const deceased = deceasedFrames[0];
   const deceasedAccount = getAccountLedgerBySlot(balances, deceased.slot);
   const survivorAccount = getAccountLedgerBySlot(balances, survivor.slot);
-  const deceasedBalance = sumAccountLedger(deceasedAccount);
+  let transferredBalance = 0;
+  let transferredEstateDesignatedRegisteredBalance = 0;
+  let transferredSpousalDesignatedRegisteredBalance = 0;
+  let removedForOtherBeneficiariesBalance = 0;
 
-  if (deceasedBalance > 0.01) {
-    survivorAccount.rrsp += deceasedAccount.rrsp;
-    survivorAccount.rrif += deceasedAccount.rrif;
-    survivorAccount.tfsa += deceasedAccount.tfsa;
+  for (const accountKey of [
+    "rrsp",
+    "rrif",
+    "tfsa",
+    "lira",
+    "lif",
+    "dcPension",
+  ] as const) {
+    const balance = deceasedAccount[accountKey];
+
+    if (balance <= 0.01) {
+      continue;
+    }
+
+    const designation = resolveBeneficiaryDesignation(
+      deceased.member,
+      accountKey,
+      true,
+      warnings,
+    );
+
+    if (designation === "other-beneficiary") {
+      deceasedAccount[accountKey] = 0;
+      removedForOtherBeneficiariesBalance += balance;
+      warnings.push(
+        `${labelForSlot(
+          deceased.slot,
+        )}'s ${accountKey} balance of ${roundCurrency(
+          balance,
+        )} was removed from the surviving household because it is marked for another direct beneficiary outside the estate.`,
+      );
+      continue;
+    }
+
+    survivorAccount[accountKey] += balance;
+    deceasedAccount[accountKey] = 0;
+    transferredBalance += balance;
+
+    if (designation === "spouse") {
+      transferredSpousalDesignatedRegisteredBalance += balance;
+    } else {
+      transferredEstateDesignatedRegisteredBalance += balance;
+    }
+  }
+
+  const estateRoutedNonRegisteredAndCash =
+    deceasedAccount.nonRegistered + deceasedAccount.cash;
+
+  if (deceasedAccount.nonRegistered > 0.01 || deceasedAccount.cash > 0.01) {
     survivorAccount.nonRegistered += deceasedAccount.nonRegistered;
     survivorAccount.nonRegisteredCostBase += deceasedAccount.nonRegisteredCostBase;
     survivorAccount.cash += deceasedAccount.cash;
-    survivorAccount.lira += deceasedAccount.lira;
-    survivorAccount.lif += deceasedAccount.lif;
-    survivorAccount.dcPension += deceasedAccount.dcPension;
-
-    deceasedAccount.rrsp = 0;
-    deceasedAccount.rrif = 0;
-    deceasedAccount.tfsa = 0;
+    transferredBalance += deceasedAccount.nonRegistered + deceasedAccount.cash;
     deceasedAccount.nonRegistered = 0;
     deceasedAccount.nonRegisteredCostBase = 0;
     deceasedAccount.cash = 0;
-    deceasedAccount.lira = 0;
-    deceasedAccount.lif = 0;
-    deceasedAccount.dcPension = 0;
+  }
 
+  if (transferredBalance > 0.01) {
     warnings.push(
       `Baseline survivor rollover moved ${roundCurrency(
-        deceasedBalance,
+        transferredBalance,
       )} of modeled assets from ${labelForSlot(
         deceased.slot,
       ).toLowerCase()} to ${labelForSlot(survivor.slot).toLowerCase()}.`,
+    );
+  }
+
+  if (transferredSpousalDesignatedRegisteredBalance > 0.01) {
+    warnings.push(
+      `Registered assets designated directly to the spouse were continued inside the surviving household for ${roundCurrency(
+        transferredSpousalDesignatedRegisteredBalance,
+      )}.`,
+    );
+  }
+
+  if (
+    transferredEstateDesignatedRegisteredBalance > 0.01 ||
+    estateRoutedNonRegisteredAndCash > 0.01
+  ) {
+    warnings.push(
+      "Assets still marked to the estate are currently routed to the surviving spouse as a baseline will/intestacy assumption. More exact estate-beneficiary flow remains a separate roadmap item.",
+    );
+  }
+
+  if (removedForOtherBeneficiariesBalance > 0.01) {
+    warnings.push(
+      `Direct-beneficiary designations removed ${roundCurrency(
+        removedForOtherBeneficiariesBalance,
+      )} from the surviving household because those assets were assumed to pass outside the estate to another beneficiary.`,
     );
   }
 
@@ -3563,17 +3631,7 @@ function estimateDeathYearFinalReturnAdjustment(
   const survivorFrames = memberFrames.filter(
     (frame) => frame.isAlive && !terminalFrames.some((terminal) => terminal.slot === frame.slot),
   );
-
-  if (survivorFrames.length === 1 && terminalFrames.length === 1) {
-    return {
-      taxAdjustment: 0,
-      oasRecoveryTaxAdjustment: 0,
-      taxableIncomeAdjustment: 0,
-      warnings: [
-        "Death-year final return currently assumes a baseline spousal rollover for remaining registered and capital-property balances when a surviving spouse or common-law partner remains in the model. Beneficiary designations and non-rollover assets will be modeled separately.",
-      ],
-    };
-  }
+  const survivorExists = survivorFrames.length === 1;
 
   let taxAdjustment = 0;
   let oasRecoveryTaxAdjustment = 0;
@@ -3594,6 +3652,8 @@ function estimateDeathYearFinalReturnAdjustment(
       baseState,
       getTaxAttributeLedgerBySlot(taxAttributes, frame.slot),
       account,
+      frame.member,
+      survivorExists,
     );
 
     taxAdjustment += estimate.taxAdjustment;
@@ -3613,6 +3673,10 @@ function estimateDeathYearFinalReturnAdjustment(
   if (taxAdjustment !== 0 || oasRecoveryTaxAdjustment !== 0) {
     warnings.push(
       "Death-year final return now adds a baseline terminal tax adjustment for remaining registered balances and deemed taxable capital gains when no surviving spouse remains in the model. Optional returns and exact CRA final-return elections are still incomplete.",
+    );
+  } else if (survivorExists) {
+    warnings.push(
+      "Death-year final return is assuming baseline spousal continuation for estate-routed and spouse-designated assets while still taxing any registered balances explicitly marked for another direct beneficiary.",
     );
   }
 
@@ -3648,19 +3712,65 @@ function estimateFinalReturnTaxIncrementForAccount(
   baseState: MemberTaxState,
   taxAttributeLedger: TaxAttributeLedger,
   account: AccountLedger,
+  member: HouseholdMemberInput,
+  survivorExists: boolean,
 ): DeathYearFinalReturnAdjustment {
   const capitalGainsInclusionRate =
     context.rules.taxableAccounts.capitalGainsInclusionRate;
-  const terminalOrdinaryIncome =
-    account.rrsp + account.rrif + account.lira + account.lif;
-  const terminalTaxableCapitalGains = Math.max(
+  const taxableRegisteredAccounts: Array<[RegisteredAccountKey, number]> = [
+    [
+      "rrsp",
+      shouldIncludeRegisteredAccountInFinalReturn(
+        member,
+        "rrsp",
+        survivorExists,
+      )
+        ? account.rrsp
+        : 0,
+    ],
+    [
+      "rrif",
+      shouldIncludeRegisteredAccountInFinalReturn(
+        member,
+        "rrif",
+        survivorExists,
+      )
+        ? account.rrif
+        : 0,
+    ],
+    [
+      "lira",
+      shouldIncludeRegisteredAccountInFinalReturn(
+        member,
+        "lira",
+        survivorExists,
+      )
+        ? account.lira
+        : 0,
+    ],
+    [
+      "lif",
+      shouldIncludeRegisteredAccountInFinalReturn(
+        member,
+        "lif",
+        survivorExists,
+      )
+        ? account.lif
+        : 0,
+    ],
+  ];
+  const terminalOrdinaryIncome = taxableRegisteredAccounts.reduce(
+    (sum, [, value]) => sum + value,
     0,
-    account.nonRegistered - account.nonRegisteredCostBase,
-  ) * capitalGainsInclusionRate;
-  const terminalAllowableCapitalLosses = Math.max(
-    0,
-    account.nonRegisteredCostBase - account.nonRegistered,
-  ) * capitalGainsInclusionRate;
+  );
+  const terminalTaxableCapitalGains = survivorExists
+    ? 0
+    : Math.max(0, account.nonRegistered - account.nonRegisteredCostBase) *
+      capitalGainsInclusionRate;
+  const terminalAllowableCapitalLosses = survivorExists
+    ? 0
+    : Math.max(0, account.nonRegisteredCostBase - account.nonRegistered) *
+      capitalGainsInclusionRate;
   const ordinaryTaxableIncome =
     baseState.ordinaryTaxableIncome + terminalOrdinaryIncome;
   const grossTaxableCapitalGains =
@@ -3719,6 +3829,16 @@ function estimateFinalReturnTaxIncrementForAccount(
   );
   const warnings = [...taxEstimate.warnings];
 
+  for (const [accountKey, value] of taxableRegisteredAccounts) {
+    if (value > 0.01) {
+      warnings.push(
+        `Death-year final return added ${roundCurrency(
+          value,
+        )} from the remaining ${accountKey} balance because that account was not modeled as a spouse-continuation transfer.`,
+      );
+    }
+  }
+
   if (
     remainingCapitalLossPoolForOtherIncome > 0 &&
     ordinaryTaxableIncome > netOrdinaryTaxableIncome
@@ -3728,19 +3848,15 @@ function estimateFinalReturnTaxIncrementForAccount(
     );
   }
 
-  if (terminalOrdinaryIncome > 0) {
-    warnings.push(
-      `Death-year final return added ${roundCurrency(
-        terminalOrdinaryIncome,
-      )} of remaining registered-plan balances to taxable income on the modeled final return baseline.`,
-    );
-  }
-
   if (terminalTaxableCapitalGains > 0) {
     warnings.push(
       `Death-year final return added ${roundCurrency(
         terminalTaxableCapitalGains,
       )} of taxable capital gains from the deemed disposition of remaining non-registered assets.`,
+    );
+  } else if (survivorExists && account.nonRegistered > 0.01) {
+    warnings.push(
+      "Death-year final return did not trigger a deemed disposition on remaining non-registered assets because the current survivor baseline assumes estate-routed capital property continues to the surviving spouse unless joint-ownership or beneficiary rules say otherwise.",
     );
   }
 
@@ -3949,7 +4065,7 @@ function estimateProbateOrEstateAdminCost(
     return undefined;
   }
 
-  const probateBaseValue = sumProbateProxyBalances(balances);
+  const probateBaseValue = sumProbateProxyBalances(context, balances, warnings);
 
   if (probateBaseValue <= 0.01) {
     return 0;
@@ -4005,9 +4121,9 @@ function buildAssumptionList(context: NormalizedContext): string[] {
     "Survivor years now include baseline CPP/QPP survivor-pension support when the surviving spouse is not already on a combined public-pension path or when a manual annual survivor-benefit override is supplied, but full Service Canada / Retraite Quebec combined-benefit math remains incomplete.",
     "Survivor-year spending defaults to 72% of the couple after-tax spending target unless expenseProfile.survivorSpendingPercentOfCouple is explicitly provided.",
     "Death years use a baseline mid-year heuristic: recurring income, contributions, and mandatory RRIF/LIF withdrawals are prorated to 50%, and couple spending transitions halfway toward the survivor spending path for that year.",
-    "Death-year annual results now add a baseline CRA final-return adjustment when no surviving spouse remains in the model: remaining RRSP / RRIF / LIRA / LIF balances are treated as taxable, remaining non-registered assets are treated as deemed dispositions, and available net capital losses can reduce other income on the final-return baseline. Optional returns, beneficiary designations, and joint-ownership estate exclusions remain separate roadmap items.",
+    "Death-year annual results now add a baseline CRA final-return adjustment. Registered accounts marked for a surviving spouse can defer terminal income on the current baseline, registered accounts marked for another direct beneficiary still trigger terminal tax while leaving the surviving household, and remaining non-registered assets are treated as deemed dispositions only when no surviving spouse remains in the model. Optional returns and joint-ownership estate exclusions remain separate roadmap items.",
     "Projection length now follows the longest modeled remaining lifetime in the household, capped by household.maxProjectionAge relative to the primary member's age.",
-    "Summary estate values now include a baseline projection-end liquidation proxy: remaining RRSP / RRIF / LIRA / LIF balances are treated as taxable on a terminal return, net capital losses can offset capital gains and then other income on a final-return baseline, and ON / BC / AB probate-style estate administration costs are approximated when the projection reaches the modeled final death. Beneficiary designations, joint ownership, Quebec will-form detail, and DC pension death treatment remain incomplete.",
+    "Summary estate values now include a baseline projection-end liquidation proxy: remaining RRSP / RRIF / LIRA / LIF balances are treated as taxable on a terminal return, net capital losses can offset capital gains and then other income on a final-return baseline, and ON / BC / AB probate-style estate administration costs are approximated when the projection reaches the modeled final death. Direct beneficiary designations can now remove registered assets from the probate proxy, while joint ownership, Quebec will-form detail, and DC pension death treatment remain incomplete.",
   ];
 }
 
@@ -4087,22 +4203,73 @@ function sumBalances(balances: HouseholdLedger): number {
   return sumAccountLedger(balances.primary) + (balances.partner ? sumAccountLedger(balances.partner) : 0);
 }
 
-function sumProbateProxyBalances(balances: HouseholdLedger): number {
+function sumProbateProxyBalances(
+  context: NormalizedContext,
+  balances: HouseholdLedger,
+  warnings: string[],
+): number {
   return (
-    sumProbateProxyAccountBalances(balances.primary) +
-    (balances.partner ? sumProbateProxyAccountBalances(balances.partner) : 0)
+    sumProbateProxyAccountBalances(
+      context.input.household.primary,
+      balances.primary,
+      false,
+      warnings,
+    ) +
+    (balances.partner
+      ? sumProbateProxyAccountBalances(
+          context.input.household.partner!,
+          balances.partner,
+          false,
+          warnings,
+        )
+      : 0)
   );
 }
 
-function sumProbateProxyAccountBalances(account: AccountLedger): number {
+function sumProbateProxyAccountBalances(
+  member: HouseholdMemberInput,
+  account: AccountLedger,
+  survivorExists: boolean,
+  warnings: string[],
+): number {
   return (
-    account.rrsp +
-    account.rrif +
-    account.tfsa +
+    resolveProbateProxyAccountAmount(
+      member,
+      "rrsp",
+      account.rrsp,
+      survivorExists,
+      warnings,
+    ) +
+    resolveProbateProxyAccountAmount(
+      member,
+      "rrif",
+      account.rrif,
+      survivorExists,
+      warnings,
+    ) +
+    resolveProbateProxyAccountAmount(
+      member,
+      "tfsa",
+      account.tfsa,
+      survivorExists,
+      warnings,
+    ) +
     account.nonRegistered +
     account.cash +
-    account.lira +
-    account.lif
+    resolveProbateProxyAccountAmount(
+      member,
+      "lira",
+      account.lira,
+      survivorExists,
+      warnings,
+    ) +
+    resolveProbateProxyAccountAmount(
+      member,
+      "lif",
+      account.lif,
+      survivorExists,
+      warnings,
+    )
   );
 }
 
@@ -4223,6 +4390,69 @@ function labelForSlot(slot: MemberSlot): string {
   return slot === "primary" ? "Primary household member" : "Partner";
 }
 
+function resolveBeneficiaryDesignation(
+  member: HouseholdMemberInput,
+  accountKey: RegisteredAccountKey,
+  survivorExists: boolean,
+  warnings: string[],
+): BeneficiaryDesignationType {
+  const designation = member.beneficiaryDesignations?.[accountKey] ?? "estate";
+
+  if (designation === "spouse" && !survivorExists) {
+    warnings.push(
+      `${accountKey} is marked with a spouse beneficiary designation, but no surviving spouse remains in the current modeled path. The engine is falling back to estate treatment for that account.`,
+    );
+    return "estate";
+  }
+
+  if (member.profile.provinceAtRetirement === "QC" && accountKey === "tfsa" && designation !== "estate") {
+    warnings.push(
+      "Quebec TFSA beneficiary and successor-holder treatment depends on the account arrangement and Quebec succession law. The current scaffold still lets the user mark the account as bypassing probate, but this should be reviewed manually for Quebec cases.",
+    );
+  }
+
+  return designation;
+}
+
+function shouldIncludeRegisteredAccountInFinalReturn(
+  member: HouseholdMemberInput,
+  accountKey: RegisteredAccountKey,
+  survivorExists: boolean,
+): boolean {
+  const designation = member.beneficiaryDesignations?.[accountKey] ?? "estate";
+
+  if (designation === "other-beneficiary") {
+    return true;
+  }
+
+  if (designation === "spouse") {
+    return !survivorExists;
+  }
+
+  return !survivorExists;
+}
+
+function resolveProbateProxyAccountAmount(
+  member: HouseholdMemberInput,
+  accountKey: RegisteredAccountKey,
+  amount: number,
+  survivorExists: boolean,
+  warnings: string[],
+): number {
+  if (amount <= 0.01) {
+    return 0;
+  }
+
+  const designation = resolveBeneficiaryDesignation(
+    member,
+    accountKey,
+    survivorExists,
+    warnings,
+  );
+
+  return designation === "estate" ? amount : 0;
+}
+
 function getAgeBySlot(year: ProjectionYear, slot: MemberSlot): number {
   return slot === "primary" ? year.primaryAge : year.partnerAge ?? year.primaryAge;
 }
@@ -4239,13 +4469,26 @@ function resolveTerminalEstateProvince(
   }
 
   const slotBalances: Array<{ slot: MemberSlot; balance: number }> = [
-    { slot: "primary", balance: sumProbateProxyAccountBalances(balances.primary) },
+    {
+      slot: "primary",
+      balance: sumProbateProxyAccountBalances(
+        context.input.household.primary,
+        balances.primary,
+        false,
+        [],
+      ),
+    },
   ];
 
   if (balances.partner) {
     slotBalances.push({
       slot: "partner",
-      balance: sumProbateProxyAccountBalances(balances.partner),
+      balance: sumProbateProxyAccountBalances(
+        context.input.household.partner!,
+        balances.partner,
+        false,
+        [],
+      ),
     });
   }
 

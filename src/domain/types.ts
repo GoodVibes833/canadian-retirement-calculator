@@ -34,6 +34,10 @@ export type SurvivorBenefitEstimateMode =
   | "automatic"
   | "manual-annual"
   | "disabled";
+export type BeneficiaryDesignationType =
+  | "estate"
+  | "spouse"
+  | "other-beneficiary";
 export type WithdrawalOrder =
   | "taxable-first"
   | "rrsp-rrif-first"
@@ -128,6 +132,15 @@ export interface InvestmentAccountBalances {
   dcPension?: number;
 }
 
+export interface RegisteredAccountBeneficiaryDesignations {
+  rrsp?: BeneficiaryDesignationType;
+  rrif?: BeneficiaryDesignationType;
+  tfsa?: BeneficiaryDesignationType;
+  lira?: BeneficiaryDesignationType;
+  lif?: BeneficiaryDesignationType;
+  dcPension?: BeneficiaryDesignationType;
+}
+
 export interface AnnualContributionPlan {
   rrsp: number;
   tfsa: number;
@@ -177,6 +190,7 @@ export interface HouseholdMemberInput {
   definedBenefitPension?: DefinedBenefitPensionInput;
   lockedInAccountPolicy?: LockedInAccountPolicy;
   taxableAccountTaxProfile?: TaxableAccountTaxProfile;
+  beneficiaryDesignations?: RegisteredAccountBeneficiaryDesignations;
   accounts: InvestmentAccountBalances;
   contributions: AnnualContributionPlan;
   annuityIncome?: ScheduledCashFlow[];

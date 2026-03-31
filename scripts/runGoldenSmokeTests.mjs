@@ -1464,9 +1464,129 @@ const taxChecks = [
       );
       assert(
         firstYear.warnings.some((warning) =>
-          warning.includes("spousal rollover"),
+          warning.includes("spousal rollover") ||
+          warning.includes("spousal continuation"),
         ),
         "Death year with a surviving spouse should warn that remaining balances are being handled with a baseline spousal-rollover assumption.",
+      );
+    },
+  },
+  {
+    id: "T43",
+    label: "Direct beneficiary designations reduce probate proxy without removing terminal RRSP tax",
+    check() {
+      const baseInput = readJson("data/fixtures/golden/golden-on-single-saver.json");
+      const bypassInput = readJson("data/fixtures/golden/golden-on-single-saver.json");
+
+      for (const input of [baseInput, bypassInput]) {
+        input.household.primary.profile.currentAge = 65;
+        input.household.primary.profile.retirementAge = 65;
+        input.household.primary.profile.lifeExpectancy = 65;
+        input.household.maxProjectionAge = 65;
+        input.household.primary.employment.baseAnnualIncome = 0;
+        input.household.primary.employment.bonusAnnualIncome = 0;
+        input.household.primary.accounts.rrsp = 250000;
+        input.household.primary.accounts.rrif = 0;
+        input.household.primary.accounts.tfsa = 120000;
+        input.household.primary.accounts.nonRegistered = 90000;
+        input.household.primary.accounts.cash = 40000;
+        input.household.primary.taxableAccountTaxProfile = {
+          ...(input.household.primary.taxableAccountTaxProfile ?? {}),
+          nonRegisteredAdjustedCostBase: 60000,
+        };
+        input.household.expenseProfile.desiredAfterTaxSpending = 0;
+        input.household.expenseProfile.housing = 0;
+        input.household.expenseProfile.utilities = 0;
+        input.household.expenseProfile.food = 0;
+        input.household.expenseProfile.transportation = 0;
+        input.household.expenseProfile.healthcare = 0;
+        input.household.expenseProfile.insurance = 0;
+        input.household.expenseProfile.travelAndRecreation = 0;
+        input.household.expenseProfile.debtPayments = 0;
+        input.household.primary.contributions.rrsp = 0;
+        input.household.primary.contributions.tfsa = 0;
+        input.household.primary.contributions.nonRegistered = 0;
+      }
+
+      bypassInput.household.primary.beneficiaryDesignations = {
+        rrsp: "other-beneficiary",
+        tfsa: "other-beneficiary",
+      };
+
+      const baseResult = simulateRetirementPlan(baseInput, rules);
+      const bypassResult = simulateRetirementPlan(bypassInput, rules);
+
+      assert(
+        (bypassResult.summary.estimatedProbateAndEstateAdminCost ?? 0) <
+          (baseResult.summary.estimatedProbateAndEstateAdminCost ?? 0),
+        "Registered accounts marked for direct beneficiaries should reduce the probate proxy because those assets no longer pass through the estate baseline.",
+      );
+      assert(
+        Math.abs(
+          (bypassResult.summary.estimatedTerminalTaxLiability ?? 0) -
+            (baseResult.summary.estimatedTerminalTaxLiability ?? 0),
+        ) < 0.01,
+        "A non-spouse RRSP beneficiary should still leave the terminal RRSP tax burden in place on the final return baseline.",
+      );
+    },
+  },
+  {
+    id: "T44",
+    label: "Other-beneficiary registered assets leave the surviving household after death",
+    check() {
+      const baselineInput = readJson("data/fixtures/golden/golden-on-rrif-couple.json");
+      const designatedInput = readJson("data/fixtures/golden/golden-on-rrif-couple.json");
+      baselineInput.household.primary.profile.lifeExpectancy = 72;
+      designatedInput.household.primary.profile.lifeExpectancy = 72;
+      designatedInput.household.primary.beneficiaryDesignations = {
+        rrif: "other-beneficiary",
+      };
+
+      const baselineResult = simulateRetirementPlan(baselineInput, rules);
+      const designatedResult = simulateRetirementPlan(designatedInput, rules);
+      const baselineSurvivorYear = baselineResult.years[1];
+      const designatedSurvivorYear = designatedResult.years[1];
+
+      assert(
+        designatedSurvivorYear.endOfYearAccountBalances.partner.rrif <
+          baselineSurvivorYear.endOfYearAccountBalances.partner.rrif,
+        "RRIF assets marked for another direct beneficiary should no longer remain inside the surviving household in later years.",
+      );
+      assert(
+        designatedSurvivorYear.warnings.some((warning) =>
+          warning.includes("outside the estate to another beneficiary"),
+        ),
+        "The survivor year should explain when registered assets left the modeled household because of a direct-beneficiary designation.",
+      );
+    },
+  },
+  {
+    id: "T45",
+    label: "Other-beneficiary registered balances trigger death-year tax even when a spouse survives",
+    check() {
+      const baselineInput = readJson("data/fixtures/golden/golden-on-rrif-couple.json");
+      const designatedInput = readJson("data/fixtures/golden/golden-on-rrif-couple.json");
+      baselineInput.household.primary.profile.lifeExpectancy = 72;
+      designatedInput.household.primary.profile.lifeExpectancy = 72;
+      designatedInput.household.primary.beneficiaryDesignations = {
+        rrif: "other-beneficiary",
+      };
+
+      const baselineResult = simulateRetirementPlan(baselineInput, rules);
+      const designatedResult = simulateRetirementPlan(designatedInput, rules);
+      const baselineDeathYear = baselineResult.years[0];
+      const designatedDeathYear = designatedResult.years[0];
+
+      assert(
+        designatedDeathYear.deathYearFinalReturnTaxAdjustment >
+          baselineDeathYear.deathYearFinalReturnTaxAdjustment,
+        "A registered account marked for another direct beneficiary should still create death-year final-return tax even when a spouse remains alive in the model.",
+      );
+      assert(
+        designatedDeathYear.warnings.some((warning) =>
+          warning.includes("not modeled as a spouse-continuation transfer"),
+        ),
+        "Death-year tax warning should explain that the designated registered balance did not receive spouse-continuation treatment.",
       );
     },
   },

@@ -205,11 +205,11 @@ Reason:
 
 If we keep building immediately, the best next implementation target is:
 
-1. `R01` actual death-year final return handling
+1. `R03` joint ownership estate exclusions
 
 Right behind it:
 
-2. `R02` beneficiary designations
-3. `R03` joint ownership estate exclusions
+2. `R04` GIS / Allowance prior-year logic
+3. `R05` exact LIF formulas
 
-That trio would make the new estate summary materially more trustworthy very quickly.
+That trio would make the current death / estate summary and low-income path materially more trustworthy very quickly.
