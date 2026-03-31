@@ -15,6 +15,7 @@ export interface ProjectionYear {
   dbPensionIncome: number;
   otherPlannedIncome: number;
   rrspRrifWithdrawals: number;
+  lifWithdrawals: number;
   tfsaWithdrawals: number;
   taxableWithdrawals: number;
   cashWithdrawals: number;

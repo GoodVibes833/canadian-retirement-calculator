@@ -31,6 +31,31 @@
       "label": "Retraite Quebec - Calculation of Your Retirement Pension Under the Quebec Pension Plan",
       "url": "https://www.rrq.gouv.qc.ca/en/retraite/rrq/calcul_rente/Pages/calcul_rente.aspx",
       "accessedOn": "2026-03-30"
+    },
+    {
+      "label": "FSRA - Ontario LIF and LRIF maximum annual income payment amount tables and instructions",
+      "url": "https://www.fsrao.ca/consumers/pensions/life-income-funds-lifs-ontario/lif-and-lrif-maximum-annual-income-payment-amount-tables-and-instructions",
+      "accessedOn": "2026-03-31"
+    },
+    {
+      "label": "BCFSA - Life Income Funds (LIF)",
+      "url": "https://www.bcfsa.ca/public-resources/pensions/life-income-funds-lif",
+      "accessedOn": "2026-03-31"
+    },
+    {
+      "label": "OSFI - Maximum withdrawal percentages for federally regulated LIFs in 2026",
+      "url": "https://www.osfi-bsif.gc.ca/en/supervision/private-pension-plans/regulatory-reporting/guide-completing-annual-information-return/life-income-fund-withdrawal-percentages-2026",
+      "accessedOn": "2026-03-31"
+    },
+    {
+      "label": "Government of Alberta - Locked-in retirement accounts and life income funds",
+      "url": "https://www.alberta.ca/locked-in-retirement-accounts-and-life-income-funds",
+      "accessedOn": "2026-03-31"
+    },
+    {
+      "label": "Retraite Quebec - Calculs Express for an FRV and a locked-in retirement account",
+      "url": "https://www.rrq.gouv.qc.ca/en/services/services_en_ligne/calculs_express/Pages/calculs_express.aspx",
+      "accessedOn": "2026-03-31"
     }
   ],
   "cpp": {
@@ -157,6 +182,59 @@
       "93": 0.1634,
       "94": 0.1879,
       "95": 0.2
+    }
+  },
+  "lockedIn": {
+    "jurisdictions": {
+      "ON": {
+        "earliestConversionAge": 50,
+        "preIncomeAccountLabel": "LIRA",
+        "incomeAccountLabel": "LIF",
+        "usesRrifMinimumRule": true,
+        "fallbackLongTermRate": 0.06,
+        "applySixPercentFloor": true,
+        "annuityCertainEndAge": 90,
+        "notes": [
+          "Ontario LIF fallback maximum uses the official annuity-to-age-90 structure with a 6% floor.",
+          "Users should be allowed to override with the institution-calculated annual maximum when available."
+        ]
+      },
+      "BC": {
+        "earliestConversionAge": 50,
+        "preIncomeAccountLabel": "LIRA",
+        "incomeAccountLabel": "LIF",
+        "usesRrifMinimumRule": true,
+        "fallbackLongTermRate": 0.0349,
+        "applySixPercentFloor": false,
+        "annuityCertainEndAge": 90,
+        "notes": [
+          "BC LIF maximum depends on long-term rates and prior-year investment return.",
+          "The fallback path uses a federal-style annuity factor and should be overridden with the institution maximum when available."
+        ]
+      },
+      "AB": {
+        "earliestConversionAge": 50,
+        "preIncomeAccountLabel": "LIRA",
+        "incomeAccountLabel": "LIF",
+        "usesRrifMinimumRule": true,
+        "fallbackLongTermRate": 0.06,
+        "applySixPercentFloor": true,
+        "annuityCertainEndAge": 90,
+        "notes": [
+          "Alberta LIF maximum depends on legislation, age, and previous-year investment return.",
+          "The MVP path uses an Ontario-style annuity fallback and should be overridden when the institution maximum is known."
+        ]
+      },
+      "QC": {
+        "earliestConversionAge": 55,
+        "preIncomeAccountLabel": "CRI",
+        "incomeAccountLabel": "FRV",
+        "usesRrifMinimumRule": true,
+        "notes": [
+          "Quebec FRV rules are materially different and temporary-income rules are not yet modeled.",
+          "Manual annual minimum and maximum overrides should be preferred for Quebec."
+        ]
+      }
     }
   },
   "registeredAccounts": {

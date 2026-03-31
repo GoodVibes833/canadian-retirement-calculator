@@ -281,6 +281,106 @@ const taxChecks = [
       );
     },
   },
+  {
+    id: "T05",
+    label: "LIRA stays locked before planned conversion age",
+    check() {
+      const input = readJson("data/fixtures/locked-in/on-lira-pre-conversion.json");
+      const result = simulateRetirementPlan(input, rules);
+      const firstYear = result.years[0];
+
+      assert(
+        firstYear.lifWithdrawals === 0,
+        "Pre-conversion LIRA scenario should not produce LIF withdrawals.",
+      );
+      assert(
+        firstYear.endOfYearAccountBalances.primary.lira > 0,
+        "LIRA balance should remain intact before the planned conversion age.",
+      );
+      assert(
+        firstYear.shortfallOrSurplus < 0,
+        "Locked pre-conversion assets should still leave a modeled shortfall when no other cash source exists.",
+      );
+    },
+  },
+  {
+    id: "T06",
+    label: "Ontario LIF manual cap is respected",
+    check() {
+      const input = readJson("data/fixtures/locked-in/on-lif-manual-cap.json");
+      const result = simulateRetirementPlan(input, rules);
+      const firstYear = result.years[0];
+
+      assert(
+        firstYear.lifWithdrawals <= 10000.01,
+        "Ontario LIF withdrawals should stay within the manual annual maximum.",
+      );
+      assert(
+        firstYear.lifWithdrawals > 0,
+        "Ontario LIF scenario should produce some locked-in withdrawals.",
+      );
+    },
+  },
+  {
+    id: "T07",
+    label: "BC LIF fallback warning is surfaced",
+    check() {
+      const input = readJson("data/fixtures/locked-in/bc-lif-fallback.json");
+      const result = simulateRetirementPlan(input, rules);
+      const firstYear = result.years[0];
+
+      assert(
+        firstYear.lifWithdrawals > 0,
+        "BC LIF scenario should produce some locked-in withdrawals.",
+      );
+      assert(
+        firstYear.warnings.some((warning) =>
+          warning.includes("fallback estimate"),
+        ),
+        "BC LIF scenario should warn when a fallback maximum is used.",
+      );
+    },
+  },
+  {
+    id: "T08",
+    label: "Alberta LIF fallback warning is surfaced",
+    check() {
+      const input = readJson("data/fixtures/locked-in/ab-lif-fallback.json");
+      const result = simulateRetirementPlan(input, rules);
+      const firstYear = result.years[0];
+
+      assert(
+        firstYear.lifWithdrawals > 0,
+        "Alberta LIF scenario should produce some locked-in withdrawals.",
+      );
+      assert(
+        firstYear.warnings.some((warning) =>
+          warning.includes("fallback estimate"),
+        ),
+        "Alberta LIF scenario should warn when a fallback maximum is used.",
+      );
+    },
+  },
+  {
+    id: "T09",
+    label: "Quebec FRV stays on warning-heavy partial support",
+    check() {
+      const input = readJson("data/fixtures/locked-in/qc-frv-warning.json");
+      const result = simulateRetirementPlan(input, rules);
+      const firstYear = result.years[0];
+
+      assert(
+        firstYear.warnings.some((warning) =>
+          warning.includes("Quebec FRV maximum withdrawal"),
+        ),
+        "Quebec FRV scenario should surface the partial-support maximum warning.",
+      );
+      assert(
+        firstYear.lifWithdrawals > 0,
+        "Quebec FRV scenario should still allow baseline minimum-style withdrawals.",
+      );
+    },
+  },
 ];
 
 for (const check of taxChecks) {

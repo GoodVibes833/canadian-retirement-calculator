@@ -74,6 +74,30 @@ export interface RegisteredAccountLimits {
   rrspAnnualLimit: number;
 }
 
+export type LockedInJurisdictionRuleCode =
+  | "AB"
+  | "BC"
+  | "Federal"
+  | "ON"
+  | "QC";
+
+export interface LockedInJurisdictionRuleSet {
+  earliestConversionAge: number;
+  preIncomeAccountLabel: string;
+  incomeAccountLabel: string;
+  usesRrifMinimumRule: boolean;
+  fallbackLongTermRate?: number;
+  applySixPercentFloor?: boolean;
+  annuityCertainEndAge?: number;
+  notes: string[];
+}
+
+export interface LockedInRuleSet {
+  jurisdictions: Partial<
+    Record<LockedInJurisdictionRuleCode, LockedInJurisdictionRuleSet>
+  >;
+}
+
 export interface CanadaRuleSet {
   jurisdiction: "CA";
   effectiveFrom: string;
@@ -82,5 +106,6 @@ export interface CanadaRuleSet {
   qpp: QppRuleSet;
   oas: OasRuleSet;
   rrif: RrifRuleSet;
+  lockedIn: LockedInRuleSet;
   registeredAccounts: RegisteredAccountLimits;
 }

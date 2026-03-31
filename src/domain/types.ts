@@ -15,6 +15,14 @@ export type ProvinceCode =
   | "YT";
 
 export type PensionPlanType = "CPP" | "QPP";
+export type LockedInJurisdictionCode =
+  | "AB"
+  | "BC"
+  | "Federal"
+  | "ON"
+  | "QC";
+export type LockedInPreIncomeAccountLabel = "CRI" | "LIRA";
+export type LockedInIncomeAccountLabel = "FRV" | "LIF";
 export type CppQppEstimateMode =
   | "statement-at-65"
   | "manual-at-start-age"
@@ -69,6 +77,18 @@ export interface DefinedBenefitPensionInput {
   indexationRate?: number;
   bridgeTo65AnnualAmount?: number;
   survivorContinuationPercent?: number;
+}
+
+export interface LockedInAccountPolicy {
+  jurisdiction: LockedInJurisdictionCode;
+  preIncomeAccountLabel?: LockedInPreIncomeAccountLabel;
+  incomeAccountLabel?: LockedInIncomeAccountLabel;
+  plannedConversionAge?: number;
+  manualMinimumAnnualWithdrawal?: number;
+  manualMaximumAnnualWithdrawal?: number;
+  assumedPreviousYearReturnRate?: number;
+  usedOneTimeFiftyPercentUnlocking?: boolean;
+  notes?: string;
 }
 
 export interface InvestmentAccountBalances {
@@ -128,6 +148,7 @@ export interface HouseholdMemberInput {
   employment: EmploymentIncomeInput;
   publicBenefits: PublicBenefitInput;
   definedBenefitPension?: DefinedBenefitPensionInput;
+  lockedInAccountPolicy?: LockedInAccountPolicy;
   accounts: InvestmentAccountBalances;
   contributions: AnnualContributionPlan;
   annuityIncome?: ScheduledCashFlow[];

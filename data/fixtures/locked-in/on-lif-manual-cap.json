@@ -1,0 +1,75 @@
+{
+  "household": {
+    "householdType": "single",
+    "primary": {
+      "profile": {
+        "id": "primary",
+        "currentAge": 65,
+        "retirementAge": 65,
+        "lifeExpectancy": 90,
+        "provinceAtRetirement": "ON",
+        "pensionPlan": "CPP",
+        "yearsResidedInCanadaAfter18": 40
+      },
+      "employment": {
+        "baseAnnualIncome": 0,
+        "annualGrowthRate": 0,
+        "partTimeIncomeAfterRetirement": []
+      },
+      "publicBenefits": {
+        "cppQppEstimateMode": "manual-at-start-age",
+        "manualMonthlyPensionAtStartAge": 0,
+        "pensionStartAge": 65,
+        "oasEstimateMode": "residence-years",
+        "oasStartAge": 65,
+        "oasEligible": false
+      },
+      "lockedInAccountPolicy": {
+        "jurisdiction": "ON",
+        "preIncomeAccountLabel": "LIRA",
+        "incomeAccountLabel": "LIF",
+        "plannedConversionAge": 65,
+        "manualMaximumAnnualWithdrawal": 10000
+      },
+      "accounts": {
+        "rrsp": 0,
+        "rrif": 0,
+        "tfsa": 0,
+        "nonRegistered": 0,
+        "cash": 0,
+        "lira": 0,
+        "lif": 200000,
+        "dcPension": 0
+      },
+      "contributions": {
+        "rrsp": 0,
+        "tfsa": 0,
+        "nonRegistered": 0,
+        "contributionEscalationRate": 0
+      }
+    },
+    "inflationRate": 0.02,
+    "preRetirementReturnRate": 0.045,
+    "postRetirementReturnRate": 0.04,
+    "annualFeeRate": 0.006,
+    "taxMode": "nominal",
+    "withdrawalOrder": "rrsp-rrif-first",
+    "pensionIncomeSplittingEnabled": false,
+    "oasClawbackAwareMode": true,
+    "gisModelingEnabled": false,
+    "expenseProfile": {
+      "desiredAfterTaxSpending": 30000,
+      "housing": 12000,
+      "utilities": 2400,
+      "food": 3600,
+      "transportation": 2400,
+      "healthcare": 1200,
+      "insurance": 1200,
+      "travelAndRecreation": 7200,
+      "debtPayments": 0
+    },
+    "oneTimeEvents": [],
+    "projectionStartYear": 2026,
+    "maxProjectionAge": 70
+  }
+}

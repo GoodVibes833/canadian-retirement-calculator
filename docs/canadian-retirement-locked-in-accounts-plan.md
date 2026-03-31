@@ -130,11 +130,12 @@ Rationale:
 
 Do not silently treat `LIF` like `RRIF`.
 
-Short-term:
+Current engine status:
 
-- keep warning that LIF is not fully modeled,
-- let users enter manual overrides,
-- implement `ON / BC / AB` before Quebec.
+- baseline `LIRA -> LIF` conversion now exists,
+- baseline `ON / BC / AB` minimum / maximum guardrails now exist,
+- Quebec `FRV` remains warning-heavy partial support,
+- manual annual min / max overrides are still preferred when available.
 
 Medium-term:
 

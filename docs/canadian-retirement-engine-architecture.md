@@ -153,7 +153,7 @@ The initial scaffold in `src/engine/simulateRetirementPlan.ts` intentionally doe
 The scaffold is intentionally incomplete in these areas:
 
 - taxes now use a 2026 federal and province-aware scaffold for ON, BC, AB, and QC, including basic personal, age, and pension-income credits for federal / ON / BC / AB and a partial Quebec path,
-- RRIF minimum withdrawals are modeled, but LIF withdrawals are not,
+- RRIF minimum withdrawals are modeled, and locked-in accounts now support baseline LIRA-to-LIF conversion plus ON / BC / AB fallback LIF guardrails with Quebec warning-heavy partial support,
 - GIS is not calculated,
 - pension splitting now uses an annual heuristic on planned eligible pension income before discretionary drawdown, not a full lifetime optimization,
 - spouse-aware survivor logic now includes a baseline spousal asset rollover and defined-benefit survivor continuation, but still omits CPP survivor pension and estate-tax effects,
@@ -164,9 +164,9 @@ The scaffold is intentionally incomplete in these areas:
 
 Recommended order from here:
 
-1. Add LIF and locked-in account min / max withdrawal logic by province.
+1. Replace locked-in fallback maximums with more exact institution-style annual calculations and fuller Alberta / BC formulas.
 2. Add taxable-account character treatment for non-registered withdrawals.
-3. Deepen Quebec-specific QPP and tax-path behavior.
+3. Deepen Quebec-specific QPP, FRV, and tax-path behavior.
 4. Add GIS and Allowance.
 5. Add fuller survivor modeling including CPP survivor pension and death-year tax handling.
 6. Add Monte Carlo.

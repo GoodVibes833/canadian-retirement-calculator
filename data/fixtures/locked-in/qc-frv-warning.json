@@ -1,0 +1,74 @@
+{
+  "household": {
+    "householdType": "single",
+    "primary": {
+      "profile": {
+        "id": "primary",
+        "currentAge": 65,
+        "retirementAge": 65,
+        "lifeExpectancy": 90,
+        "provinceAtRetirement": "QC",
+        "pensionPlan": "QPP",
+        "yearsResidedInCanadaAfter18": 40
+      },
+      "employment": {
+        "baseAnnualIncome": 0,
+        "annualGrowthRate": 0,
+        "partTimeIncomeAfterRetirement": []
+      },
+      "publicBenefits": {
+        "cppQppEstimateMode": "manual-at-start-age",
+        "manualMonthlyPensionAtStartAge": 0,
+        "pensionStartAge": 65,
+        "oasEstimateMode": "residence-years",
+        "oasStartAge": 65,
+        "oasEligible": false
+      },
+      "lockedInAccountPolicy": {
+        "jurisdiction": "QC",
+        "preIncomeAccountLabel": "CRI",
+        "incomeAccountLabel": "FRV",
+        "plannedConversionAge": 65
+      },
+      "accounts": {
+        "rrsp": 0,
+        "rrif": 0,
+        "tfsa": 0,
+        "nonRegistered": 0,
+        "cash": 0,
+        "lira": 0,
+        "lif": 170000,
+        "dcPension": 0
+      },
+      "contributions": {
+        "rrsp": 0,
+        "tfsa": 0,
+        "nonRegistered": 0,
+        "contributionEscalationRate": 0
+      }
+    },
+    "inflationRate": 0.02,
+    "preRetirementReturnRate": 0.045,
+    "postRetirementReturnRate": 0.04,
+    "annualFeeRate": 0.006,
+    "taxMode": "nominal",
+    "withdrawalOrder": "rrsp-rrif-first",
+    "pensionIncomeSplittingEnabled": false,
+    "oasClawbackAwareMode": true,
+    "gisModelingEnabled": false,
+    "expenseProfile": {
+      "desiredAfterTaxSpending": 26000,
+      "housing": 10000,
+      "utilities": 2200,
+      "food": 3600,
+      "transportation": 2200,
+      "healthcare": 1200,
+      "insurance": 800,
+      "travelAndRecreation": 6000,
+      "debtPayments": 0
+    },
+    "oneTimeEvents": [],
+    "projectionStartYear": 2026,
+    "maxProjectionAge": 70
+  }
+}
