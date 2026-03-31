@@ -4,6 +4,7 @@ import type {
   BeneficiaryDesignationType,
   HouseholdMemberInput,
   HouseholdType,
+  LockedInJurisdictionCode,
   PensionPlanType,
   ProvinceCode,
   QuebecWillForm,
@@ -25,8 +26,11 @@ type EditableBalances = {
   tfsa: number;
   nonRegistered: number;
   cash: number;
+  lira: number;
   lif: number;
 };
+
+type EditableLockedInBooleanChoice = "unspecified" | "yes" | "no";
 
 type EditableMember = {
   age: number;
@@ -43,10 +47,24 @@ type EditableMember = {
   rentalIncome: number;
   foreignPensionIncome: number;
   balances: EditableBalances;
+  lockedInPolicy: EditableLockedInPolicy;
   taxProfile: EditableTaxProfile;
   beneficiaryDesignations: EditableBeneficiaryDesignations;
   jointOwnership: EditableJointOwnership;
   estateAdministration: EditableEstateAdministration;
+};
+
+type EditableLockedInPolicy = {
+  useCustomPolicy: boolean;
+  jurisdiction: LockedInJurisdictionCode;
+  plannedConversionAge: number;
+  manualMinimumAnnualWithdrawal: number;
+  manualMaximumAnnualWithdrawal: number;
+  assumedPreviousYearReturnRatePercent: number;
+  quebecTemporaryIncomeRequested: boolean;
+  quebecTemporaryIncomeOptionOffered: EditableLockedInBooleanChoice;
+  quebecTemporaryIncomeNoOtherFrvConfirmed: EditableLockedInBooleanChoice;
+  quebecTemporaryIncomeEstimatedOtherIncome: number;
 };
 
 type EditableTaxProfile = {
@@ -169,6 +187,21 @@ const beneficiaryDesignationOptions: Array<{
   { value: "estate", label: "Estate" },
   { value: "spouse", label: "Spouse" },
   { value: "other-beneficiary", label: "Other Beneficiary" },
+];
+const lockedInJurisdictionOptions: LockedInJurisdictionCode[] = [
+  "ON",
+  "BC",
+  "AB",
+  "QC",
+  "Federal",
+];
+const lockedInBooleanChoiceOptions: Array<{
+  value: EditableLockedInBooleanChoice;
+  label: string;
+}> = [
+  { value: "unspecified", label: "Assume / not specified" },
+  { value: "yes", label: "Yes" },
+  { value: "no", label: "No" },
 ];
 const quebecWillFormOptions: Array<{
   value: QuebecWillForm;
@@ -2033,6 +2066,17 @@ function MemberEditor(props: {
       },
     });
   };
+  const updateLockedInPolicy = (
+    updates: Partial<EditableLockedInPolicy>,
+  ) => {
+    onChange({
+      ...member,
+      lockedInPolicy: {
+        ...member.lockedInPolicy,
+        ...updates,
+      },
+    });
+  };
 
   return (
     <section className="member-card">
@@ -2242,6 +2286,7 @@ function MemberEditor(props: {
             ["tfsa", "TFSA"],
             ["nonRegistered", "Non-Registered"],
             ["cash", "Cash"],
+            ["lira", "LIRA / CRI"],
             ["lif", "LIF / FRV"],
           ] as const
         ).map(([key, label]) => (
@@ -2265,6 +2310,212 @@ function MemberEditor(props: {
       </div>
 
       <div className="advanced-settings-grid">
+        <section className="advanced-settings-card">
+          <div className="member-header">
+            <h4>Locked-In Accounts</h4>
+          </div>
+          <p className="section-note">
+            Use an explicit policy when the household has LIRA, LIF, or FRV
+            assets and you know the governing rules or institution limits.
+          </p>
+          <label className="toggle-row compact-toggle-row">
+            <input
+              type="checkbox"
+              checked={member.lockedInPolicy.useCustomPolicy}
+              onChange={(event) =>
+                updateLockedInPolicy({ useCustomPolicy: event.target.checked })
+              }
+            />
+            <span>Use explicit locked-in policy instead of engine inference</span>
+          </label>
+          <div className="form-section compact-form-section">
+            <label>
+              <FieldLabel
+                label="Jurisdiction"
+                hint="Determines the LIRA / LIF / FRV rule set the engine applies."
+              />
+              <select
+                disabled={!member.lockedInPolicy.useCustomPolicy}
+                value={member.lockedInPolicy.jurisdiction}
+                onChange={(event) =>
+                  updateLockedInPolicy({
+                    jurisdiction: event.target.value as LockedInJurisdictionCode,
+                  })
+                }
+              >
+                {lockedInJurisdictionOptions.map((jurisdiction) => (
+                  <option
+                    key={`locked-in-jurisdiction-${jurisdiction}`}
+                    value={jurisdiction}
+                  >
+                    {jurisdiction}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <FieldLabel
+                label="Planned Conversion Age"
+                hint="Age when LIRA / CRI is assumed to convert into an income account like LIF / FRV."
+              />
+              <input
+                type="number"
+                disabled={!member.lockedInPolicy.useCustomPolicy}
+                value={member.lockedInPolicy.plannedConversionAge}
+                onChange={(event) =>
+                  updateLockedInPolicy({
+                    plannedConversionAge: readNumber(event.target.value),
+                  })
+                }
+              />
+            </label>
+            <label>
+              <FieldLabel
+                label="Manual Minimum"
+                hint="Use when the institution has already calculated the annual minimum withdrawal."
+              />
+              <input
+                type="number"
+                disabled={!member.lockedInPolicy.useCustomPolicy}
+                value={member.lockedInPolicy.manualMinimumAnnualWithdrawal}
+                onChange={(event) =>
+                  updateLockedInPolicy({
+                    manualMinimumAnnualWithdrawal: readNumber(
+                      event.target.value,
+                    ),
+                  })
+                }
+              />
+            </label>
+            <label>
+              <FieldLabel
+                label="Manual Maximum"
+                hint="Use when the institution has already calculated the annual maximum withdrawal."
+              />
+              <input
+                type="number"
+                disabled={!member.lockedInPolicy.useCustomPolicy}
+                value={member.lockedInPolicy.manualMaximumAnnualWithdrawal}
+                onChange={(event) =>
+                  updateLockedInPolicy({
+                    manualMaximumAnnualWithdrawal: readNumber(
+                      event.target.value,
+                    ),
+                  })
+                }
+              />
+            </label>
+            <label>
+              <FieldLabel
+                label="Previous-Year Return (%)"
+                hint="Used in fallback LIF maximum formulas where prior-year return matters."
+              />
+              <input
+                type="number"
+                step="0.1"
+                disabled={!member.lockedInPolicy.useCustomPolicy}
+                value={member.lockedInPolicy.assumedPreviousYearReturnRatePercent}
+                onChange={(event) =>
+                  updateLockedInPolicy({
+                    assumedPreviousYearReturnRatePercent: readNumber(
+                      event.target.value,
+                    ),
+                  })
+                }
+              />
+            </label>
+          </div>
+          {member.lockedInPolicy.jurisdiction === "QC" ? (
+            <>
+              <label className="toggle-row compact-toggle-row">
+                <input
+                  type="checkbox"
+                  disabled={!member.lockedInPolicy.useCustomPolicy}
+                  checked={member.lockedInPolicy.quebecTemporaryIncomeRequested}
+                  onChange={(event) =>
+                    updateLockedInPolicy({
+                      quebecTemporaryIncomeRequested: event.target.checked,
+                    })
+                  }
+                />
+                <span>Request Quebec FRV temporary income under age 55</span>
+              </label>
+              <div className="form-section compact-form-section">
+                <label>
+                  <FieldLabel
+                    label="Contract Offers Option"
+                    hint="Leave as assume when you do not know whether the FRV contract allows temporary income."
+                  />
+                  <select
+                    disabled={!member.lockedInPolicy.useCustomPolicy}
+                    value={member.lockedInPolicy.quebecTemporaryIncomeOptionOffered}
+                    onChange={(event) =>
+                      updateLockedInPolicy({
+                        quebecTemporaryIncomeOptionOffered:
+                          event.target.value as EditableLockedInBooleanChoice,
+                      })
+                    }
+                  >
+                    {lockedInBooleanChoiceOptions.map((option) => (
+                      <option
+                        key={`qc-temp-option-${option.value}`}
+                        value={option.value}
+                      >
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <FieldLabel
+                    label="No Other FRV Confirmed"
+                    hint="Temporary-income declarations generally assume there is no other FRV for the year."
+                  />
+                  <select
+                    disabled={!member.lockedInPolicy.useCustomPolicy}
+                    value={member.lockedInPolicy.quebecTemporaryIncomeNoOtherFrvConfirmed}
+                    onChange={(event) =>
+                      updateLockedInPolicy({
+                        quebecTemporaryIncomeNoOtherFrvConfirmed:
+                          event.target.value as EditableLockedInBooleanChoice,
+                      })
+                    }
+                  >
+                    {lockedInBooleanChoiceOptions.map((option) => (
+                      <option
+                        key={`qc-no-other-frv-${option.value}`}
+                        value={option.value}
+                      >
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <FieldLabel
+                    label="Estimated Other Income"
+                    hint="Next-12-month other-income estimate for Quebec temporary-income declarations."
+                  />
+                  <input
+                    type="number"
+                    disabled={!member.lockedInPolicy.useCustomPolicy}
+                    value={
+                      member.lockedInPolicy.quebecTemporaryIncomeEstimatedOtherIncome
+                    }
+                    onChange={(event) =>
+                      updateLockedInPolicy({
+                        quebecTemporaryIncomeEstimatedOtherIncome: readNumber(
+                          event.target.value,
+                        ),
+                      })
+                    }
+                  />
+                </label>
+              </div>
+            </>
+          ) : null}
+        </section>
+
         <section className="advanced-settings-card">
           <div className="member-header">
             <h4>Taxable Account Detail</h4>
@@ -3006,8 +3257,10 @@ function createEditableMember(member: HouseholdMemberInput): EditableMember {
       tfsa: member.accounts.tfsa,
       nonRegistered: member.accounts.nonRegistered,
       cash: member.accounts.cash ?? 0,
+      lira: member.accounts.lira ?? 0,
       lif: member.accounts.lif ?? 0,
     },
+    lockedInPolicy: createEditableLockedInPolicy(member),
     taxProfile: createEditableTaxProfile(member),
     beneficiaryDesignations: createEditableBeneficiaryDesignations(member),
     jointOwnership: createEditableJointOwnership(member),
@@ -3115,6 +3368,7 @@ function applyMemberScenario(
   member.publicBenefits.oasEligible = editable.oasEligible;
   member.publicBenefits.oasResidenceYearsOverride = editable.oasResidenceYears;
   applyBalances(member, editable.balances);
+  member.lockedInAccountPolicy = buildLockedInPolicyInput(editable.lockedInPolicy);
   member.taxableAccountTaxProfile = buildTaxProfileInput(editable.taxProfile);
   member.beneficiaryDesignations = buildBeneficiaryDesignationsInput(
     editable.beneficiaryDesignations,
@@ -3141,6 +3395,7 @@ function applyBalances(member: HouseholdMemberInput, balances: EditableBalances)
   member.accounts.tfsa = balances.tfsa;
   member.accounts.nonRegistered = balances.nonRegistered;
   member.accounts.cash = balances.cash;
+  member.accounts.lira = balances.lira;
   member.accounts.lif = balances.lif;
 }
 
@@ -3181,6 +3436,47 @@ function createEditableTaxProfile(member: HouseholdMemberInput): EditableTaxProf
       member.taxableAccountTaxProfile?.annualForeignNonBusinessIncomeTaxPaid ?? 0,
     annualReturnOfCapitalDistribution:
       member.taxableAccountTaxProfile?.annualReturnOfCapitalDistribution ?? 0,
+  };
+}
+
+function createEditableLockedInPolicy(
+  member: HouseholdMemberInput,
+): EditableLockedInPolicy {
+  const policy = member.lockedInAccountPolicy;
+  const defaultJurisdiction =
+    member.profile.provinceAtRetirement === "ON" ||
+    member.profile.provinceAtRetirement === "BC" ||
+    member.profile.provinceAtRetirement === "AB" ||
+    member.profile.provinceAtRetirement === "QC"
+      ? member.profile.provinceAtRetirement
+      : "Federal";
+
+  return {
+    useCustomPolicy: Boolean(policy),
+    jurisdiction: policy?.jurisdiction ?? defaultJurisdiction,
+    plannedConversionAge:
+      policy?.plannedConversionAge ?? member.profile.retirementAge,
+    manualMinimumAnnualWithdrawal: policy?.manualMinimumAnnualWithdrawal ?? 0,
+    manualMaximumAnnualWithdrawal: policy?.manualMaximumAnnualWithdrawal ?? 0,
+    assumedPreviousYearReturnRatePercent: toPercentValue(
+      policy?.assumedPreviousYearReturnRate ?? 0,
+    ),
+    quebecTemporaryIncomeRequested:
+      policy?.quebecTemporaryIncomeRequested === true,
+    quebecTemporaryIncomeOptionOffered:
+      policy?.quebecTemporaryIncomeOptionOffered === undefined
+        ? "unspecified"
+        : policy.quebecTemporaryIncomeOptionOffered
+          ? "yes"
+          : "no",
+    quebecTemporaryIncomeNoOtherFrvConfirmed:
+      policy?.quebecTemporaryIncomeNoOtherFrvConfirmed === undefined
+        ? "unspecified"
+        : policy.quebecTemporaryIncomeNoOtherFrvConfirmed
+          ? "yes"
+          : "no",
+    quebecTemporaryIncomeEstimatedOtherIncome:
+      policy?.quebecTemporaryIncomeEstimatedOtherIncome ?? 0,
   };
 }
 
@@ -3280,6 +3576,49 @@ function buildTaxProfileInput(editable: EditableTaxProfile) {
   }
 
   return Object.keys(nextProfile).length > 0 ? nextProfile : undefined;
+}
+
+function buildLockedInPolicyInput(editable: EditableLockedInPolicy) {
+  if (!editable.useCustomPolicy) {
+    return undefined;
+  }
+
+  const nextPolicy: NonNullable<HouseholdMemberInput["lockedInAccountPolicy"]> = {
+    jurisdiction: editable.jurisdiction,
+    plannedConversionAge: editable.plannedConversionAge,
+  };
+
+  if (editable.manualMinimumAnnualWithdrawal > 0) {
+    nextPolicy.manualMinimumAnnualWithdrawal =
+      editable.manualMinimumAnnualWithdrawal;
+  }
+  if (editable.manualMaximumAnnualWithdrawal > 0) {
+    nextPolicy.manualMaximumAnnualWithdrawal =
+      editable.manualMaximumAnnualWithdrawal;
+  }
+  if (editable.assumedPreviousYearReturnRatePercent !== 0) {
+    nextPolicy.assumedPreviousYearReturnRate = fromPercentValue(
+      editable.assumedPreviousYearReturnRatePercent,
+    );
+  }
+  if (editable.jurisdiction === "QC") {
+    nextPolicy.quebecTemporaryIncomeRequested =
+      editable.quebecTemporaryIncomeRequested;
+    if (editable.quebecTemporaryIncomeOptionOffered !== "unspecified") {
+      nextPolicy.quebecTemporaryIncomeOptionOffered =
+        editable.quebecTemporaryIncomeOptionOffered === "yes";
+    }
+    if (editable.quebecTemporaryIncomeNoOtherFrvConfirmed !== "unspecified") {
+      nextPolicy.quebecTemporaryIncomeNoOtherFrvConfirmed =
+        editable.quebecTemporaryIncomeNoOtherFrvConfirmed === "yes";
+    }
+    if (editable.quebecTemporaryIncomeEstimatedOtherIncome > 0) {
+      nextPolicy.quebecTemporaryIncomeEstimatedOtherIncome =
+        editable.quebecTemporaryIncomeEstimatedOtherIncome;
+    }
+  }
+
+  return nextPolicy;
 }
 
 function buildBeneficiaryDesignationsInput(
@@ -3990,6 +4329,91 @@ function validateMember(
     }
   }
 
+  if (member.lockedInPolicy.useCustomPolicy) {
+    if (member.lockedInPolicy.plannedConversionAge < 0) {
+      issues.push({
+        level: "error",
+        message: `${label} locked-in planned conversion age cannot be negative.`,
+      });
+    }
+
+    if (member.lockedInPolicy.manualMinimumAnnualWithdrawal < 0) {
+      issues.push({
+        level: "error",
+        message: `${label} locked-in manual minimum cannot be negative.`,
+      });
+    }
+
+    if (member.lockedInPolicy.manualMaximumAnnualWithdrawal < 0) {
+      issues.push({
+        level: "error",
+        message: `${label} locked-in manual maximum cannot be negative.`,
+      });
+    }
+
+    if (
+      member.lockedInPolicy.manualMaximumAnnualWithdrawal > 0 &&
+      member.lockedInPolicy.manualMinimumAnnualWithdrawal > 0 &&
+      member.lockedInPolicy.manualMaximumAnnualWithdrawal <
+        member.lockedInPolicy.manualMinimumAnnualWithdrawal
+    ) {
+      issues.push({
+        level: "warning",
+        message: `${label} locked-in manual maximum is below the manual minimum, so the engine will effectively raise the cap to the minimum.`,
+      });
+    }
+
+    issues.push(
+      ...validatePercentScenarioValue(
+        `${label} locked-in previous-year return`,
+        member.lockedInPolicy.assumedPreviousYearReturnRatePercent,
+        -20,
+        20,
+        12,
+      ),
+    );
+
+    if (
+      member.balances.lira > 0 &&
+      member.lockedInPolicy.plannedConversionAge <= member.age
+    ) {
+      issues.push({
+        level: "warning",
+        message: `${label} still has a LIRA / CRI balance entered, but the planned conversion age is at or before the current age.`,
+      });
+    }
+
+    if (
+      member.lockedInPolicy.jurisdiction === "QC" &&
+      member.lockedInPolicy.quebecTemporaryIncomeEstimatedOtherIncome < 0
+    ) {
+      issues.push({
+        level: "error",
+        message: `${label} Quebec temporary-income estimated other income cannot be negative.`,
+      });
+    }
+
+    if (
+      member.lockedInPolicy.jurisdiction !== "QC" &&
+      (member.lockedInPolicy.quebecTemporaryIncomeRequested ||
+        member.lockedInPolicy.quebecTemporaryIncomeOptionOffered !==
+          "unspecified" ||
+        member.lockedInPolicy.quebecTemporaryIncomeNoOtherFrvConfirmed !==
+          "unspecified" ||
+        member.lockedInPolicy.quebecTemporaryIncomeEstimatedOtherIncome > 0)
+    ) {
+      issues.push({
+        level: "warning",
+        message: `${label} has Quebec FRV temporary-income settings entered, but the locked-in jurisdiction is not Quebec.`,
+      });
+    }
+  } else if (member.balances.lira > 0 || member.balances.lif > 0) {
+    issues.push({
+      level: "warning",
+      message: `${label} has locked-in balances entered, but the UI is still using engine-inferred locked-in policy rules.`,
+    });
+  }
+
   if (member.rentalIncome < 0 || member.foreignPensionIncome < 0) {
     issues.push({
       level: "error",
@@ -4306,7 +4730,59 @@ function normalizeImportedMember(
         fallback.balances.nonRegistered,
       ),
       cash: safeNumber(member?.balances?.cash, fallback.balances.cash),
+      lira: safeNumber(member?.balances?.lira, fallback.balances.lira),
       lif: safeNumber(member?.balances?.lif, fallback.balances.lif),
+    },
+    lockedInPolicy: {
+      useCustomPolicy:
+        typeof member?.lockedInPolicy?.useCustomPolicy === "boolean"
+          ? member.lockedInPolicy.useCustomPolicy
+          : fallback.lockedInPolicy.useCustomPolicy,
+      jurisdiction: lockedInJurisdictionOptions.includes(
+        member?.lockedInPolicy?.jurisdiction as LockedInJurisdictionCode,
+      )
+        ? (member?.lockedInPolicy?.jurisdiction as LockedInJurisdictionCode)
+        : fallback.lockedInPolicy.jurisdiction,
+      plannedConversionAge: safeNumber(
+        member?.lockedInPolicy?.plannedConversionAge,
+        fallback.lockedInPolicy.plannedConversionAge,
+      ),
+      manualMinimumAnnualWithdrawal: safeNumber(
+        member?.lockedInPolicy?.manualMinimumAnnualWithdrawal,
+        fallback.lockedInPolicy.manualMinimumAnnualWithdrawal,
+      ),
+      manualMaximumAnnualWithdrawal: safeNumber(
+        member?.lockedInPolicy?.manualMaximumAnnualWithdrawal,
+        fallback.lockedInPolicy.manualMaximumAnnualWithdrawal,
+      ),
+      assumedPreviousYearReturnRatePercent: safeNumber(
+        member?.lockedInPolicy?.assumedPreviousYearReturnRatePercent,
+        fallback.lockedInPolicy.assumedPreviousYearReturnRatePercent,
+      ),
+      quebecTemporaryIncomeRequested:
+        typeof member?.lockedInPolicy?.quebecTemporaryIncomeRequested === "boolean"
+          ? member.lockedInPolicy.quebecTemporaryIncomeRequested
+          : fallback.lockedInPolicy.quebecTemporaryIncomeRequested,
+      quebecTemporaryIncomeOptionOffered: lockedInBooleanChoiceOptions.some(
+        (option) =>
+          option.value === member?.lockedInPolicy?.quebecTemporaryIncomeOptionOffered,
+      )
+        ? member?.lockedInPolicy?.quebecTemporaryIncomeOptionOffered ??
+          fallback.lockedInPolicy.quebecTemporaryIncomeOptionOffered
+        : fallback.lockedInPolicy.quebecTemporaryIncomeOptionOffered,
+      quebecTemporaryIncomeNoOtherFrvConfirmed:
+        lockedInBooleanChoiceOptions.some(
+          (option) =>
+            option.value ===
+            member?.lockedInPolicy?.quebecTemporaryIncomeNoOtherFrvConfirmed,
+        )
+          ? member?.lockedInPolicy?.quebecTemporaryIncomeNoOtherFrvConfirmed ??
+            fallback.lockedInPolicy.quebecTemporaryIncomeNoOtherFrvConfirmed
+          : fallback.lockedInPolicy.quebecTemporaryIncomeNoOtherFrvConfirmed,
+      quebecTemporaryIncomeEstimatedOtherIncome: safeNumber(
+        member?.lockedInPolicy?.quebecTemporaryIncomeEstimatedOtherIncome,
+        fallback.lockedInPolicy.quebecTemporaryIncomeEstimatedOtherIncome,
+      ),
     },
     taxProfile: {
       adjustedCostBase: safeNumber(
