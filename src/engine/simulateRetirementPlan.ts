@@ -2907,18 +2907,33 @@ function estimateCppSurvivorIncome(
       monthlySurvivorBenefit = standaloneMonthlySurvivorBenefit;
     }
   } else {
-    if (survivorOwnMonthlyRetirement > 0) {
-      warnings.push(
-        "CPP survivor pension under age 65 is not automatically modeled when the survivor is already receiving a CPP retirement pension. Use a manual annual survivor-benefit input for this case.",
-      );
-      return 0;
-    }
-
-    monthlySurvivorBenefit = Math.min(
+    const standaloneMonthlySurvivorBenefit = Math.min(
       context.rules.cpp.survivorMaximumMonthlyUnder65,
       context.rules.cpp.survivorUnder65FlatRateMonthly +
         deceasedMonthlyAmountAt65 * 0.375,
     );
+
+    if (survivorOwnMonthlyRetirement > 0) {
+      const survivorMaximumRetirementForCurrentStartAge =
+        applyCppStartAgeAdjustment(
+          context.rules.cpp.maxMonthlyRetirementAt65,
+          survivor.member.publicBenefits.pensionStartAge,
+          context.rules,
+        );
+      monthlySurvivorBenefit = Math.max(
+        0,
+        Math.min(
+          standaloneMonthlySurvivorBenefit,
+          survivorMaximumRetirementForCurrentStartAge -
+            survivorOwnMonthlyRetirement,
+        ),
+      );
+      warnings.push(
+        "CPP survivor pension under age 65 for a survivor already receiving CPP retirement is using a baseline combined-benefit cap at the modeled maximum retirement pension for the survivor's current start age. Service Canada notes that combined benefits are adjusted for survivor age and other benefits received, so enhancement and exact combined-benefit math remain partial.",
+      );
+    } else {
+      monthlySurvivorBenefit = standaloneMonthlySurvivorBenefit;
+    }
   }
 
   if (monthlySurvivorBenefit <= 0) {
@@ -2955,13 +2970,6 @@ function estimateQppSurvivorIncome(
 
   const survivorOwnMonthlyRetirement = survivor.cppQppIncome / 12;
 
-  if (survivorOwnMonthlyRetirement > 0 && survivor.age < 65) {
-    warnings.push(
-      "QPP survivor pension is not automatically modeled when the survivor is already receiving a QPP retirement pension. Use a manual annual survivor-benefit input for this case.",
-    );
-    return 0;
-  }
-
   const entitlementRatio = clampRate(
     deceasedMonthlyAmountAt65 / context.rules.qpp.maxMonthlyRetirementAt65,
   );
@@ -2984,7 +2992,7 @@ function estimateQppSurvivorIncome(
 
   let monthlyBenefit = monthlyCap * entitlementRatio;
 
-  if (survivorOwnMonthlyRetirement > 0 && survivor.age >= 65) {
+  if (survivorOwnMonthlyRetirement > 0) {
     const survivorMaximumRetirementForCurrentStartAge = applyQppStartAgeAdjustment(
       context.rules.qpp.maxMonthlyRetirementAt65,
       survivor.member.publicBenefits.pensionStartAge,
@@ -3000,7 +3008,9 @@ function estimateQppSurvivorIncome(
 
     monthlyBenefit *= 1 - reductionRatio;
     warnings.push(
-      "QPP survivor pension for a survivor already receiving QPP retirement is using a baseline combined-benefit approximation. Retraite Quebec states the survivor portion may be reduced to zero when the survivor is already receiving the maximum retirement pension for that start age, so the scaffold linearly reduces the no-retirement survivor maximum by the survivor's current-retirement-to-maximum ratio.",
+      survivor.age >= 65
+        ? "QPP survivor pension for a survivor already receiving QPP retirement is using a baseline combined-benefit approximation. Retraite Quebec states the survivor portion may be reduced to zero when the survivor is already receiving the maximum retirement pension for that start age, so the scaffold linearly reduces the no-retirement survivor maximum by the survivor's current-retirement-to-maximum ratio."
+        : "QPP survivor pension under age 65 for a survivor already receiving QPP retirement is using a baseline combined-benefit approximation. Retraite Quebec states that combined pensions are subject to a legal maximum and may be reduced below the sum of the individual pensions, so the scaffold linearly reduces the no-retirement survivor maximum by the survivor's current-retirement-to-maximum ratio.",
     );
   }
 
@@ -3717,7 +3727,7 @@ function buildYearWarnings(
     memberFrames.filter((frame) => frame.isAlive).length === 1
   ) {
     warnings.push(
-      "Survivor years currently use baseline spousal rollover, DB continuation, and partial CPP/QPP survivor-pension support. Estate taxes, probate effects, and full combined-benefit math are still incomplete.",
+      "Survivor years currently use baseline spousal rollover, DB continuation, and partial CPP/QPP survivor-pension support, including baseline combined-benefit paths below age 65. Estate taxes, probate effects, and full combined-benefit math are still incomplete.",
     );
 
     if (context.input.household.expenseProfile.survivorSpendingPercentOfCouple === undefined) {
@@ -4465,7 +4475,7 @@ function buildAssumptionList(context: NormalizedContext): string[] {
     "QPP delayed-start increases are now baseline-supported through age 72, while early-start QPP reductions use a set-proportion approximation unless a manual start-age amount is provided.",
     "Immigrant and partial-benefit support is modeled through statement, manual, residence-year, and foreign-pension inputs.",
     "GIS / Allowance now use a baseline prior-year assessable-income path with a work-income exemption and published annual cutoffs. The first projection year falls back to a current-year proxy unless household.incomeTestedBenefitsBaseIncome is supplied, and exact Service Canada reassessment timing plus quarterly SG3-3 tables are not yet replicated.",
-    "Survivor years now include baseline CPP/QPP survivor-pension support when the surviving spouse is not already on a combined public-pension path or when a manual annual survivor-benefit override is supplied, but full Service Canada / Retraite Quebec combined-benefit math remains incomplete.",
+    "Survivor years now include baseline CPP/QPP survivor-pension support, including capped or warning-heavy combined-benefit paths when the surviving spouse is already receiving retirement benefits, but full Service Canada / Retraite Quebec combined-benefit math remains incomplete.",
     "Survivor-year spending defaults to 72% of the couple after-tax spending target unless expenseProfile.survivorSpendingPercentOfCouple is explicitly provided.",
     "Death years use a baseline mid-year heuristic: recurring income, contributions, and mandatory RRIF/LIF withdrawals are prorated to 50%, and couple spending transitions halfway toward the survivor spending path for that year.",
     "Death-year annual results now add a baseline CRA final-return adjustment. Registered accounts marked for a surviving spouse can defer terminal income on the current baseline, registered accounts marked for another direct beneficiary still trigger terminal tax while leaving the surviving household, and user-entered joint-with-surviving-spouse shares can reduce the death-year estate-settlement proxy for cash and non-registered assets. Quebec will-form branching is now baseline-supported when estateAdministrationProfile is supplied, but optional returns and broader beneficial-ownership analysis remain separate roadmap items.",

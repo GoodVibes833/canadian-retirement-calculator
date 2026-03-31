@@ -1850,6 +1850,72 @@ const taxChecks = [
       );
     },
   },
+  {
+    id: "T54",
+    label: "Under-65 CPP combined-benefit path adds a capped survivor increment when retirement is already in pay",
+    check() {
+      const enabledInput = buildUnder65CppCombinedScenario();
+      const disabledInput = buildUnder65CppCombinedScenario();
+      disabledInput.household.primary.publicBenefits.survivorBenefitEstimateMode =
+        "disabled";
+
+      const enabledResult = simulateRetirementPlan(enabledInput, rules);
+      const disabledResult = simulateRetirementPlan(disabledInput, rules);
+      const enabledYear = byPrimaryAge(enabledResult, 64);
+      const disabledYear = byPrimaryAge(disabledResult, 64);
+      const survivorIncrement =
+        enabledYear.otherPlannedIncome - disabledYear.otherPlannedIncome;
+      const expectedAnnualIncrement = calculateExpectedUnder65CppCombinedSurvivorAnnual({
+        survivorOwnMonthlyRetirement: 1100,
+        survivorRetirementStartAge: 60,
+        deceasedMonthlyAmountAt65: 1000,
+      });
+
+      assert(
+        Math.abs(survivorIncrement - expectedAnnualIncrement) < 0.01,
+        "Under-65 CPP combined-benefit scenario should use the capped survivor increment above the survivor's existing retirement pension.",
+      );
+      assert(
+        enabledYear.warnings.some((warning) =>
+          warning.includes("under age 65 for a survivor already receiving CPP retirement"),
+        ),
+        "Under-65 CPP combined-benefit scenario should warn that it is using a baseline combined-benefit cap.",
+      );
+    },
+  },
+  {
+    id: "T55",
+    label: "Under-65 QPP combined-benefit approximation adds a positive survivor increment",
+    check() {
+      const enabledInput = buildUnder65QppCombinedScenario();
+      const disabledInput = buildUnder65QppCombinedScenario();
+      disabledInput.household.primary.publicBenefits.survivorBenefitEstimateMode =
+        "disabled";
+
+      const enabledResult = simulateRetirementPlan(enabledInput, rules);
+      const disabledResult = simulateRetirementPlan(disabledInput, rules);
+      const enabledYear = enabledResult.years[0];
+      const disabledYear = disabledResult.years[0];
+      const survivorIncrement =
+        enabledYear.otherPlannedIncome - disabledYear.otherPlannedIncome;
+      const noRetirementAnnualCap = 1173.58 * (1000 / 1508) * 12;
+
+      assert(
+        survivorIncrement > 0,
+        "Under-65 QPP combined-benefit scenario should still add a positive survivor pension increment.",
+      );
+      assert(
+        survivorIncrement < noRetirementAnnualCap,
+        "Under-65 QPP combined-benefit approximation should stay below the no-retirement age-45-to-64 survivor maximum for the deceased contributor's entitlement ratio.",
+      );
+      assert(
+        enabledYear.warnings.some((warning) =>
+          warning.includes("under age 65 for a survivor already receiving QPP retirement"),
+        ),
+        "Under-65 QPP combined-benefit scenario should warn that it is using a baseline approximation.",
+      );
+    },
+  },
 ];
 
 for (const check of taxChecks) {
@@ -1930,6 +1996,138 @@ function buildQuebecEstateScenario() {
   return input;
 }
 
+function buildUnder65CppCombinedScenario() {
+  const input = readJson("data/fixtures/golden/golden-on-couple-core.json");
+
+  input.household.primary.profile.currentAge = 63;
+  input.household.primary.profile.retirementAge = 60;
+  input.household.primary.profile.lifeExpectancy = 90;
+  input.household.primary.profile.provinceAtRetirement = "ON";
+  input.household.primary.profile.pensionPlan = "CPP";
+  input.household.primary.publicBenefits.cppQppEstimateMode = "manual-at-start-age";
+  input.household.primary.publicBenefits.manualMonthlyPensionAtStartAge = 1100;
+  input.household.primary.publicBenefits.pensionStartAge = 60;
+  input.household.primary.publicBenefits.oasEligible = false;
+  input.household.primary.publicBenefits.oasStartAge = 65;
+  input.household.primary.publicBenefits.manualOasMonthlyAtStartAge = 0;
+  input.household.primary.employment.baseAnnualIncome = 0;
+  input.household.primary.employment.bonusAnnualIncome = 0;
+  input.household.primary.employment.annualGrowthRate = 0;
+  input.household.primary.accounts.rrsp = 20000;
+  input.household.primary.accounts.tfsa = 20000;
+  input.household.primary.accounts.nonRegistered = 0;
+  input.household.primary.accounts.cash = 10000;
+  input.household.primary.contributions.rrsp = 0;
+  input.household.primary.contributions.tfsa = 0;
+  input.household.primary.contributions.nonRegistered = 0;
+
+  input.household.partner.profile.currentAge = 64;
+  input.household.partner.profile.retirementAge = 64;
+  input.household.partner.profile.lifeExpectancy = 64;
+  input.household.partner.profile.provinceAtRetirement = "ON";
+  input.household.partner.profile.pensionPlan = "CPP";
+  input.household.partner.publicBenefits.cppQppEstimateMode = "manual-at-start-age";
+  input.household.partner.publicBenefits.manualMonthlyPensionAtStartAge = 1000;
+  input.household.partner.publicBenefits.pensionStartAge = 65;
+  input.household.partner.publicBenefits.oasEligible = false;
+  input.household.partner.publicBenefits.oasStartAge = 65;
+  input.household.partner.publicBenefits.manualOasMonthlyAtStartAge = 0;
+  input.household.partner.employment.baseAnnualIncome = 0;
+  input.household.partner.employment.bonusAnnualIncome = 0;
+  input.household.partner.employment.annualGrowthRate = 0;
+  input.household.partner.accounts.rrsp = 0;
+  input.household.partner.accounts.rrif = 0;
+  input.household.partner.accounts.tfsa = 0;
+  input.household.partner.accounts.nonRegistered = 0;
+  input.household.partner.accounts.cash = 0;
+  input.household.partner.accounts.lira = 0;
+  input.household.partner.accounts.lif = 0;
+  input.household.partner.accounts.dcPension = 0;
+  input.household.partner.contributions.rrsp = 0;
+  input.household.partner.contributions.tfsa = 0;
+  input.household.partner.contributions.nonRegistered = 0;
+
+  input.household.expenseProfile.desiredAfterTaxSpending = 0;
+  input.household.expenseProfile.housing = 0;
+  input.household.expenseProfile.utilities = 0;
+  input.household.expenseProfile.food = 0;
+  input.household.expenseProfile.transportation = 0;
+  input.household.expenseProfile.healthcare = 0;
+  input.household.expenseProfile.insurance = 0;
+  input.household.expenseProfile.travelAndRecreation = 0;
+  input.household.expenseProfile.debtPayments = 0;
+  input.household.projectionStartYear = 2026;
+  input.household.maxProjectionAge = 64;
+
+  return input;
+}
+
+function buildUnder65QppCombinedScenario() {
+  const input = readJson("data/fixtures/golden/golden-on-couple-core.json");
+
+  input.household.primary.profile.currentAge = 63;
+  input.household.primary.profile.retirementAge = 60;
+  input.household.primary.profile.lifeExpectancy = 90;
+  input.household.primary.profile.provinceAtRetirement = "QC";
+  input.household.primary.profile.pensionPlan = "QPP";
+  input.household.primary.publicBenefits.cppQppEstimateMode = "manual-at-start-age";
+  input.household.primary.publicBenefits.manualMonthlyPensionAtStartAge = 900;
+  input.household.primary.publicBenefits.pensionStartAge = 60;
+  input.household.primary.publicBenefits.oasEligible = false;
+  input.household.primary.publicBenefits.oasStartAge = 65;
+  input.household.primary.publicBenefits.manualOasMonthlyAtStartAge = 0;
+  input.household.primary.employment.baseAnnualIncome = 0;
+  input.household.primary.employment.bonusAnnualIncome = 0;
+  input.household.primary.employment.annualGrowthRate = 0;
+  input.household.primary.accounts.rrsp = 20000;
+  input.household.primary.accounts.tfsa = 20000;
+  input.household.primary.accounts.nonRegistered = 0;
+  input.household.primary.accounts.cash = 10000;
+  input.household.primary.contributions.rrsp = 0;
+  input.household.primary.contributions.tfsa = 0;
+  input.household.primary.contributions.nonRegistered = 0;
+
+  input.household.partner.profile.currentAge = 64;
+  input.household.partner.profile.retirementAge = 64;
+  input.household.partner.profile.lifeExpectancy = 64;
+  input.household.partner.profile.provinceAtRetirement = "QC";
+  input.household.partner.profile.pensionPlan = "QPP";
+  input.household.partner.publicBenefits.cppQppEstimateMode = "manual-at-start-age";
+  input.household.partner.publicBenefits.manualMonthlyPensionAtStartAge = 1000;
+  input.household.partner.publicBenefits.pensionStartAge = 65;
+  input.household.partner.publicBenefits.oasEligible = false;
+  input.household.partner.publicBenefits.oasStartAge = 65;
+  input.household.partner.publicBenefits.manualOasMonthlyAtStartAge = 0;
+  input.household.partner.employment.baseAnnualIncome = 0;
+  input.household.partner.employment.bonusAnnualIncome = 0;
+  input.household.partner.employment.annualGrowthRate = 0;
+  input.household.partner.accounts.rrsp = 0;
+  input.household.partner.accounts.rrif = 0;
+  input.household.partner.accounts.tfsa = 0;
+  input.household.partner.accounts.nonRegistered = 0;
+  input.household.partner.accounts.cash = 0;
+  input.household.partner.accounts.lira = 0;
+  input.household.partner.accounts.lif = 0;
+  input.household.partner.accounts.dcPension = 0;
+  input.household.partner.contributions.rrsp = 0;
+  input.household.partner.contributions.tfsa = 0;
+  input.household.partner.contributions.nonRegistered = 0;
+
+  input.household.expenseProfile.desiredAfterTaxSpending = 0;
+  input.household.expenseProfile.housing = 0;
+  input.household.expenseProfile.utilities = 0;
+  input.household.expenseProfile.food = 0;
+  input.household.expenseProfile.transportation = 0;
+  input.household.expenseProfile.healthcare = 0;
+  input.household.expenseProfile.insurance = 0;
+  input.household.expenseProfile.travelAndRecreation = 0;
+  input.household.expenseProfile.debtPayments = 0;
+  input.household.projectionStartYear = 2026;
+  input.household.maxProjectionAge = 64;
+
+  return input;
+}
+
 function calculateExpectedLifMaximum({
   openingLifBalance,
   age,
@@ -1978,4 +2176,27 @@ function calculateExpectedLifAnnuityFactor({
   }
 
   return 1 / annuityDueFactor;
+}
+
+function calculateExpectedUnder65CppCombinedSurvivorAnnual({
+  survivorOwnMonthlyRetirement,
+  survivorRetirementStartAge,
+  deceasedMonthlyAmountAt65,
+}) {
+  const standaloneMonthlySurvivorBenefit = Math.min(
+    rules.cpp.survivorMaximumMonthlyUnder65,
+    rules.cpp.survivorUnder65FlatRateMonthly + deceasedMonthlyAmountAt65 * 0.375,
+  );
+  const survivorMaximumRetirementForCurrentStartAge =
+    rules.cpp.maxMonthlyRetirementAt65 *
+    (1 - Math.abs((survivorRetirementStartAge - 65) * 12) * rules.cpp.reductionPerMonthBefore65);
+  const monthlySurvivorBenefit = Math.max(
+    0,
+    Math.min(
+      standaloneMonthlySurvivorBenefit,
+      survivorMaximumRetirementForCurrentStartAge - survivorOwnMonthlyRetirement,
+    ),
+  );
+
+  return monthlySurvivorBenefit * 12;
 }

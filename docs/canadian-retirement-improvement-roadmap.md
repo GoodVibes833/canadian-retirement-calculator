@@ -205,11 +205,11 @@ Reason:
 
 If we keep building immediately, the best next implementation target is:
 
-1. `R08` under-65 survivor combined-benefit detail
+1. `R09` quarterly OAS / GIS / Allowance indexation
 
 Right behind it:
 
-2. `R09` quarterly OAS / GIS / Allowance indexation
-3. `R15` widowhood year+1 OAS / GIS / Allowance reassessment
+2. `R15` widowhood year+1 OAS / GIS / Allowance reassessment
+3. `R10` GRE 164(6) and terminal loss carryback support
 
-That trio would make survivor precision and benefit-timing transitions materially more trustworthy very quickly.
+That trio would make benefit timing, widowhood transitions, and terminal-year tax handling materially more trustworthy very quickly.
