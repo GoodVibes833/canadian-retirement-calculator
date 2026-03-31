@@ -315,6 +315,7 @@ function projectSingleYear(
   const taxAttributes = cloneHouseholdTaxAttributeLedger(openingTaxAttributes);
   const warnings: string[] = [];
   const memberFrames = buildMemberFrames(context, period);
+  applyDeathYearSurvivorBenefitAdjustments(context, memberFrames, warnings);
   applySurvivorAdjustments(context, memberFrames, balances, warnings);
   applyAnnualTaxableAccountDistributions(
     context,
@@ -734,6 +735,43 @@ function applySurvivorAdjustments(
 
   if (survivorPublicPensionIncome > 0) {
     survivor.otherPlannedIncome += survivorPublicPensionIncome;
+  }
+}
+
+function applyDeathYearSurvivorBenefitAdjustments(
+  context: NormalizedContext,
+  memberFrames: MemberFrame[],
+  warnings: string[],
+): void {
+  const deathYearFrames = memberFrames.filter((frame) => frame.deathOccursThisYear);
+
+  if (deathYearFrames.length !== 1 || memberFrames.length < 2) {
+    return;
+  }
+
+  const deceased = deathYearFrames[0];
+  const survivor = memberFrames.find(
+    (frame) => frame.slot !== deceased.slot && frame.isAlive,
+  );
+
+  if (!survivor) {
+    return;
+  }
+
+  const deathYearSurvivorIncome = estimatePublicPensionSurvivorIncome(
+    context,
+    survivor,
+    deceased,
+    warnings,
+    0.5,
+    "death year",
+  );
+
+  if (deathYearSurvivorIncome > 0) {
+    survivor.otherPlannedIncome += deathYearSurvivorIncome;
+    warnings.push(
+      "Death-year survivor public pension is being approximated as a half-year amount because survivor benefits are assumed to start in the month after death under the mid-year death heuristic.",
+    );
   }
 }
 
@@ -2460,6 +2498,8 @@ function estimatePublicPensionSurvivorIncome(
   survivor: MemberFrame,
   deceased: MemberFrame,
   warnings: string[],
+  prorationFactor = 1,
+  phaseLabel = "survivor year",
 ): number {
   const survivorBenefitMode =
     survivor.member.publicBenefits.survivorBenefitEstimateMode ?? "automatic";
@@ -2475,16 +2515,33 @@ function estimatePublicPensionSurvivorIncome(
     warnings.push(
       `${labelForSlot(
         survivor.slot,
-      )} survivor years are using a manual annual CPP/QPP survivor benefit override.`,
+      )} ${phaseLabel} calculations are using a manual annual CPP/QPP survivor benefit override.`,
     );
-    return Math.max(0, survivor.member.publicBenefits.manualAnnualSurvivorBenefit);
+    return (
+      Math.max(0, survivor.member.publicBenefits.manualAnnualSurvivorBenefit) *
+      prorationFactor
+    );
   }
 
   if (survivor.member.profile.pensionPlan === "QPP") {
-    return estimateQppSurvivorIncome(context, survivor, deceased, warnings);
+    return estimateQppSurvivorIncome(
+      context,
+      survivor,
+      deceased,
+      warnings,
+      prorationFactor,
+      phaseLabel,
+    );
   }
 
-  return estimateCppSurvivorIncome(context, survivor, deceased, warnings);
+  return estimateCppSurvivorIncome(
+    context,
+    survivor,
+    deceased,
+    warnings,
+    prorationFactor,
+    phaseLabel,
+  );
 }
 
 function estimateCppSurvivorIncome(
@@ -2492,6 +2549,8 @@ function estimateCppSurvivorIncome(
   survivor: MemberFrame,
   deceased: MemberFrame,
   warnings: string[],
+  prorationFactor: number,
+  phaseLabel: string,
 ): number {
   const deceasedMonthlyAmountAt65 = resolveMonthlyBenefitAt65(
     context,
@@ -2547,13 +2606,13 @@ function estimateCppSurvivorIncome(
 
   warnings.push(
     `CPP survivor pension of ${roundCurrency(
-      monthlySurvivorBenefit * 12,
-    )} was added for ${labelForSlot(survivor.slot).toLowerCase()} after ${labelForSlot(
+      monthlySurvivorBenefit * 12 * prorationFactor,
+    )} was added for ${labelForSlot(survivor.slot).toLowerCase()} in the ${phaseLabel} after ${labelForSlot(
       deceased.slot,
     ).toLowerCase()}'s modeled death.`,
   );
 
-  return monthlySurvivorBenefit * 12;
+  return monthlySurvivorBenefit * 12 * prorationFactor;
 }
 
 function estimateQppSurvivorIncome(
@@ -2561,6 +2620,8 @@ function estimateQppSurvivorIncome(
   survivor: MemberFrame,
   deceased: MemberFrame,
   warnings: string[],
+  prorationFactor: number,
+  phaseLabel: string,
 ): number {
   const deceasedMonthlyAmountAt65 = resolveMonthlyBenefitAt65(
     context,
@@ -2602,13 +2663,13 @@ function estimateQppSurvivorIncome(
 
   warnings.push(
     `QPP survivor pension of ${roundCurrency(
-      annualBenefit,
-    )} was added for ${labelForSlot(survivor.slot).toLowerCase()} after ${labelForSlot(
+      annualBenefit * prorationFactor,
+    )} was added for ${labelForSlot(survivor.slot).toLowerCase()} in the ${phaseLabel} after ${labelForSlot(
       deceased.slot,
     ).toLowerCase()}'s modeled death. This path scales the published 2026 survivor maximum by the deceased contributor's modeled entitlement proportion and still needs Retraite Quebec combined-benefit detail.`,
   );
 
-  return annualBenefit;
+  return annualBenefit * prorationFactor;
 }
 
 function estimateOtherPlannedIncome(

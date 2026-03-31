@@ -1251,6 +1251,36 @@ const taxChecks = [
       );
     },
   },
+  {
+    id: "T37",
+    label: "Death year adds a half-year survivor public pension baseline",
+    check() {
+      const enabledInput = readJson("data/fixtures/golden/golden-on-couple-core.json");
+      const disabledInput = readJson("data/fixtures/golden/golden-on-couple-core.json");
+      enabledInput.household.partner.profile.lifeExpectancy = 56;
+      disabledInput.household.partner.profile.lifeExpectancy = 56;
+      disabledInput.household.primary.publicBenefits.survivorBenefitEstimateMode =
+        "disabled";
+
+      const enabledResult = simulateRetirementPlan(enabledInput, rules);
+      const disabledResult = simulateRetirementPlan(disabledInput, rules);
+      const enabledYear = enabledResult.years[0];
+      const disabledYear = disabledResult.years[0];
+
+      assert(
+        Math.abs(
+          enabledYear.otherPlannedIncome - disabledYear.otherPlannedIncome - 3431.52,
+        ) < 0.01,
+        "Death-year survivor modeling should add roughly half of the annual under-65 CPP survivor benefit under the mid-year death heuristic.",
+      );
+      assert(
+        enabledYear.warnings.some((warning) =>
+          warning.includes("half-year amount"),
+        ),
+        "Death-year survivor scenario should warn that the survivor public pension is being approximated as a half-year amount.",
+      );
+    },
+  },
 ];
 
 for (const check of taxChecks) {
