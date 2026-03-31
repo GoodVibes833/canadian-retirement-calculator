@@ -141,6 +141,11 @@ export interface RegisteredAccountBeneficiaryDesignations {
   dcPension?: BeneficiaryDesignationType;
 }
 
+export interface JointOwnershipProfile {
+  nonRegisteredJointWithSurvivingSpousePercent?: number;
+  cashJointWithSurvivingSpousePercent?: number;
+}
+
 export interface AnnualContributionPlan {
   rrsp: number;
   tfsa: number;
@@ -191,6 +196,7 @@ export interface HouseholdMemberInput {
   lockedInAccountPolicy?: LockedInAccountPolicy;
   taxableAccountTaxProfile?: TaxableAccountTaxProfile;
   beneficiaryDesignations?: RegisteredAccountBeneficiaryDesignations;
+  jointOwnershipProfile?: JointOwnershipProfile;
   accounts: InvestmentAccountBalances;
   contributions: AnnualContributionPlan;
   annuityIncome?: ScheduledCashFlow[];

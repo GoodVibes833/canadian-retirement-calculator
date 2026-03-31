@@ -205,11 +205,11 @@ Reason:
 
 If we keep building immediately, the best next implementation target is:
 
-1. `R03` joint ownership estate exclusions
+1. `R04` GIS / Allowance prior-year logic
 
 Right behind it:
 
-2. `R04` GIS / Allowance prior-year logic
-3. `R05` exact LIF formulas
+2. `R05` exact LIF formulas
+3. `R07` Quebec probate / will-form logic
 
-That trio would make the current death / estate summary and low-income path materially more trustworthy very quickly.
+That trio would make the low-income path, locked-in drawdown, and Quebec estate branch materially more trustworthy very quickly.

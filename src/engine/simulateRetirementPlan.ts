@@ -171,6 +171,13 @@ interface DeathYearFinalReturnAdjustment {
   warnings: string[];
 }
 
+interface DeathYearProbateSnapshot {
+  probateBaseValue: number;
+  probateExcludedAssets: number;
+  probateCost?: number;
+  warnings: string[];
+}
+
 interface MandatoryMinimumWithdrawalResult {
   rrifBySlot: Partial<Record<MemberSlot, number>>;
   lifBySlot: Partial<Record<MemberSlot, number>>;
@@ -459,6 +466,14 @@ function projectSingleYear(
     getAccountLedgerBySlot(balances, cashReserveSlot).cash += shortfallOrSurplus;
   }
 
+  const deathYearProbateSnapshot = estimateDeathYearProbateSnapshot(
+    context,
+    period,
+    memberFrames,
+    balances,
+  );
+  warnings.push(...deathYearProbateSnapshot.warnings);
+
   applyAnnualGrowth(context, memberFrames, balances);
 
   const yearWarnings = Array.from(
@@ -497,6 +512,20 @@ function projectSingleYear(
       deathYearFinalReturnTaxableIncomeAdjustment: roundCurrency(
         deathYearFinalReturnAdjustment.taxableIncomeAdjustment,
       ),
+      deathYearEstimatedProbateBase:
+        deathYearProbateSnapshot.probateBaseValue > 0 ||
+        deathYearProbateSnapshot.probateExcludedAssets > 0
+          ? roundCurrency(deathYearProbateSnapshot.probateBaseValue)
+          : undefined,
+      deathYearProbateExcludedAssets:
+        deathYearProbateSnapshot.probateBaseValue > 0 ||
+        deathYearProbateSnapshot.probateExcludedAssets > 0
+          ? roundCurrency(deathYearProbateSnapshot.probateExcludedAssets)
+          : undefined,
+      deathYearEstimatedProbateCost:
+        deathYearProbateSnapshot.probateCost === undefined
+          ? undefined
+          : roundCurrency(deathYearProbateSnapshot.probateCost),
       federalForeignTaxCredit: roundCurrency(
         sumMemberTaxState(memberTaxState, (state) => state.federalForeignTaxCredit),
       ),
@@ -3688,6 +3717,110 @@ function estimateDeathYearFinalReturnAdjustment(
   };
 }
 
+function estimateDeathYearProbateSnapshot(
+  context: NormalizedContext,
+  period: PeriodState,
+  memberFrames: MemberFrame[],
+  balances: HouseholdLedger,
+): DeathYearProbateSnapshot {
+  const deathYearFrames = memberFrames.filter((frame) =>
+    isDeathYearFinalReturnFrame(context, frame),
+  );
+
+  if (deathYearFrames.length === 0) {
+    return {
+      probateBaseValue: 0,
+      probateExcludedAssets: 0,
+      warnings: [],
+    };
+  }
+
+  let probateBaseValue = 0;
+  let probateExcludedAssets = 0;
+  const warnings: string[] = [];
+
+  for (const frame of deathYearFrames) {
+    const survivorExists = memberFrames.some(
+      (candidate) => candidate.slot !== frame.slot && candidate.isAlive,
+    );
+    const account = getAccountLedgerBySlot(balances, frame.slot);
+    const registeredProbate = (
+      ["rrsp", "rrif", "tfsa", "lira", "lif"] as const
+    ).reduce((sum, accountKey) => {
+      const amount = account[accountKey];
+      if (amount <= 0.01) {
+        return sum;
+      }
+
+      const designation = resolveBeneficiaryDesignation(
+        frame.member,
+        accountKey,
+        survivorExists,
+        warnings,
+      );
+
+      if (designation === "estate") {
+        return sum + amount;
+      }
+
+      probateExcludedAssets += amount;
+      return sum;
+    }, 0);
+
+    const nonRegisteredJointShare = resolveJointOwnershipExcludedAmount(
+      frame.member,
+      "nonRegistered",
+      account.nonRegistered,
+      survivorExists,
+      warnings,
+    );
+    const cashJointShare = resolveJointOwnershipExcludedAmount(
+      frame.member,
+      "cash",
+      account.cash,
+      survivorExists,
+      warnings,
+    );
+
+    const nonRegisteredProbate = Math.max(0, account.nonRegistered - nonRegisteredJointShare);
+    const cashProbate = Math.max(0, account.cash - cashJointShare);
+    probateBaseValue += registeredProbate + nonRegisteredProbate + cashProbate;
+    probateExcludedAssets += nonRegisteredJointShare + cashJointShare;
+
+    if (nonRegisteredJointShare > 0.01 || cashJointShare > 0.01) {
+      warnings.push(
+        `Joint-ownership exclusions removed ${roundCurrency(
+          nonRegisteredJointShare + cashJointShare,
+        )} from ${labelForSlot(
+          frame.slot,
+        ).toLowerCase()}'s death-year probate proxy because those assets were marked as jointly held with the surviving spouse.`,
+      );
+    }
+  }
+
+  const probateCost =
+    probateBaseValue <= 0.01
+      ? 0
+      : estimateProvinceProbateCost(
+          context.input.household.primary.profile.provinceAtRetirement,
+          probateBaseValue,
+          warnings,
+        );
+
+  if (probateBaseValue > 0.01 || probateExcludedAssets > 0.01) {
+    warnings.push(
+      `Death-year probate proxy for ${period.calendarYear} is a baseline estimate that excludes direct beneficiary designations and any user-entered joint-with-surviving-spouse shares, but still depends on real title form, beneficial ownership, and province-specific estate procedure.`,
+    );
+  }
+
+  return {
+    probateBaseValue,
+    probateExcludedAssets,
+    probateCost,
+    warnings,
+  };
+}
+
 function isDeathYearFinalReturnFrame(
   context: NormalizedContext,
   frame: MemberFrame,
@@ -4121,9 +4254,9 @@ function buildAssumptionList(context: NormalizedContext): string[] {
     "Survivor years now include baseline CPP/QPP survivor-pension support when the surviving spouse is not already on a combined public-pension path or when a manual annual survivor-benefit override is supplied, but full Service Canada / Retraite Quebec combined-benefit math remains incomplete.",
     "Survivor-year spending defaults to 72% of the couple after-tax spending target unless expenseProfile.survivorSpendingPercentOfCouple is explicitly provided.",
     "Death years use a baseline mid-year heuristic: recurring income, contributions, and mandatory RRIF/LIF withdrawals are prorated to 50%, and couple spending transitions halfway toward the survivor spending path for that year.",
-    "Death-year annual results now add a baseline CRA final-return adjustment. Registered accounts marked for a surviving spouse can defer terminal income on the current baseline, registered accounts marked for another direct beneficiary still trigger terminal tax while leaving the surviving household, and remaining non-registered assets are treated as deemed dispositions only when no surviving spouse remains in the model. Optional returns and joint-ownership estate exclusions remain separate roadmap items.",
+    "Death-year annual results now add a baseline CRA final-return adjustment. Registered accounts marked for a surviving spouse can defer terminal income on the current baseline, registered accounts marked for another direct beneficiary still trigger terminal tax while leaving the surviving household, and user-entered joint-with-surviving-spouse shares can reduce the death-year probate proxy for cash and non-registered assets. Optional returns and broader beneficial-ownership analysis remain separate roadmap items.",
     "Projection length now follows the longest modeled remaining lifetime in the household, capped by household.maxProjectionAge relative to the primary member's age.",
-    "Summary estate values now include a baseline projection-end liquidation proxy: remaining RRSP / RRIF / LIRA / LIF balances are treated as taxable on a terminal return, net capital losses can offset capital gains and then other income on a final-return baseline, and ON / BC / AB probate-style estate administration costs are approximated when the projection reaches the modeled final death. Direct beneficiary designations can now remove registered assets from the probate proxy, while joint ownership, Quebec will-form detail, and DC pension death treatment remain incomplete.",
+    "Summary estate values now include a baseline projection-end liquidation proxy: remaining RRSP / RRIF / LIRA / LIF balances are treated as taxable on a terminal return, net capital losses can offset capital gains and then other income on a final-return baseline, and ON / BC / AB probate-style estate administration costs are approximated when the projection reaches the modeled final death. Direct beneficiary designations can now remove registered assets from the probate proxy, while broader joint ownership, Quebec will-form detail, and DC pension death treatment remain incomplete.",
   ];
 }
 
@@ -4453,6 +4586,36 @@ function resolveProbateProxyAccountAmount(
   return designation === "estate" ? amount : 0;
 }
 
+function resolveJointOwnershipExcludedAmount(
+  member: HouseholdMemberInput,
+  assetKey: "nonRegistered" | "cash",
+  amount: number,
+  survivorExists: boolean,
+  warnings: string[],
+): number {
+  if (amount <= 0.01 || !survivorExists) {
+    return 0;
+  }
+
+  const configuredPercent =
+    assetKey === "nonRegistered"
+      ? member.jointOwnershipProfile?.nonRegisteredJointWithSurvivingSpousePercent ?? 0
+      : member.jointOwnershipProfile?.cashJointWithSurvivingSpousePercent ?? 0;
+  const excludedPercent = clampRate(configuredPercent);
+
+  if (configuredPercent > 1) {
+    warnings.push(
+      `${assetKey} joint-ownership percent was above 100%, so it was capped at 100% for the probate baseline.`,
+    );
+  }
+
+  if (excludedPercent <= 0) {
+    return 0;
+  }
+
+  return amount * excludedPercent;
+}
+
 function getAgeBySlot(year: ProjectionYear, slot: MemberSlot): number {
   return slot === "primary" ? year.primaryAge : year.partnerAge ?? year.primaryAge;
 }
@@ -4553,6 +4716,31 @@ function estimateAlbertaProbateFee(estateValue: number): number {
   }
 
   return 525;
+}
+
+function estimateProvinceProbateCost(
+  province: ProvinceCode,
+  estateValue: number,
+  warnings: string[],
+): number | undefined {
+  switch (province) {
+    case "ON":
+      return estimateOntarioEstateAdministrationTax(estateValue);
+    case "BC":
+      return estimateBritishColumbiaProbateFee(estateValue);
+    case "AB":
+      return estimateAlbertaProbateFee(estateValue);
+    case "QC":
+      warnings.push(
+        "Quebec death-year probate cost is not being estimated because verification depends heavily on will form and Quebec succession procedure.",
+      );
+      return undefined;
+    default:
+      warnings.push(
+        `Death-year probate cost is not yet modeled for ${province}.`,
+      );
+      return undefined;
+  }
 }
 
 function clampRate(value: number): number {

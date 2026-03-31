@@ -12,6 +12,9 @@ export interface ProjectionYear {
   oasRecoveryTax: number;
   deathYearFinalReturnTaxAdjustment: number;
   deathYearFinalReturnTaxableIncomeAdjustment: number;
+  deathYearEstimatedProbateBase?: number;
+  deathYearProbateExcludedAssets?: number;
+  deathYearEstimatedProbateCost?: number;
   federalForeignTaxCredit: number;
   provincialForeignTaxCredit: number;
   quebecCareerExtensionCredit: number;

@@ -1590,6 +1590,81 @@ const taxChecks = [
       );
     },
   },
+  {
+    id: "T46",
+    label: "Joint ownership with surviving spouse reduces death-year probate base",
+    check() {
+      const baseInput = readJson("data/fixtures/golden/golden-on-rrif-couple.json");
+      const jointInput = readJson("data/fixtures/golden/golden-on-rrif-couple.json");
+      baseInput.household.primary.profile.lifeExpectancy = 72;
+      jointInput.household.primary.profile.lifeExpectancy = 72;
+      jointInput.household.primary.jointOwnershipProfile = {
+        nonRegisteredJointWithSurvivingSpousePercent: 1,
+        cashJointWithSurvivingSpousePercent: 1,
+      };
+
+      const baseResult = simulateRetirementPlan(baseInput, rules);
+      const jointResult = simulateRetirementPlan(jointInput, rules);
+      const baseDeathYear = baseResult.years[0];
+      const jointDeathYear = jointResult.years[0];
+
+      assert(
+        (jointDeathYear.deathYearEstimatedProbateBase ?? 0) <
+          (baseDeathYear.deathYearEstimatedProbateBase ?? 0),
+        "Jointly held cash and non-registered assets should reduce the modeled death-year probate base when a spouse survives.",
+      );
+      assert(
+        Math.abs(
+          (jointDeathYear.deathYearProbateExcludedAssets ?? 0) -
+            ((baseDeathYear.deathYearEstimatedProbateBase ?? 0) -
+              (jointDeathYear.deathYearEstimatedProbateBase ?? 0)),
+        ) < 0.01,
+        "Full joint-ownership exclusion should remove the same amount from the death-year probate base that it reports as probate-excluded assets.",
+      );
+      assert(
+        (jointDeathYear.deathYearEstimatedProbateCost ?? 0) <
+          (baseDeathYear.deathYearEstimatedProbateCost ?? 0),
+        "Reducing the probate base through joint ownership should lower the modeled death-year probate cost.",
+      );
+    },
+  },
+  {
+    id: "T47",
+    label: "Joint-ownership exclusion needs a surviving spouse to apply",
+    check() {
+      const input = readJson("data/fixtures/golden/golden-on-single-saver.json");
+      input.household.primary.profile.currentAge = 65;
+      input.household.primary.profile.retirementAge = 65;
+      input.household.primary.profile.lifeExpectancy = 65;
+      input.household.maxProjectionAge = 65;
+      input.household.primary.employment.baseAnnualIncome = 0;
+      input.household.primary.employment.bonusAnnualIncome = 0;
+      input.household.primary.accounts.nonRegistered = 50000;
+      input.household.primary.accounts.cash = 10000;
+      input.household.primary.accounts.rrsp = 0;
+      input.household.primary.accounts.rrif = 0;
+      input.household.primary.accounts.tfsa = 0;
+      input.household.primary.contributions.rrsp = 0;
+      input.household.primary.contributions.tfsa = 0;
+      input.household.primary.contributions.nonRegistered = 0;
+      input.household.primary.jointOwnershipProfile = {
+        nonRegisteredJointWithSurvivingSpousePercent: 1,
+        cashJointWithSurvivingSpousePercent: 1,
+      };
+
+      const result = simulateRetirementPlan(input, rules);
+      const deathYear = result.years[0];
+
+      assert(
+        (deathYear.deathYearProbateExcludedAssets ?? 0) === 0,
+        "Joint-ownership exclusion should not apply when there is no surviving spouse in the modeled path.",
+      );
+      assert(
+        (deathYear.deathYearEstimatedProbateBase ?? 0) > 0,
+        "Without a surviving spouse, the terminal year should still produce a probate base for the single-household estate.",
+      );
+    },
+  },
 ];
 
 for (const check of taxChecks) {
