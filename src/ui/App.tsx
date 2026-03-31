@@ -49,6 +49,15 @@ type EditableScheduledIncome = {
   inflationLinked: boolean;
 };
 
+type EditableContributionPlan = {
+  rrspAnnualContribution: number;
+  tfsaAnnualContribution: number;
+  nonRegisteredAnnualContribution: number;
+  escalationRatePercent: number;
+  rrspRoomRemaining: number;
+  tfsaRoomRemaining: number;
+};
+
 type EditableMember = {
   age: number;
   retirementAge: number;
@@ -67,6 +76,7 @@ type EditableMember = {
   rentalIncome: number;
   foreignPensionIncome: number;
   balances: EditableBalances;
+  contributions: EditableContributionPlan;
   lockedInPolicy: EditableLockedInPolicy;
   taxProfile: EditableTaxProfile;
   beneficiaryDesignations: EditableBeneficiaryDesignations;
@@ -2050,6 +2060,18 @@ function MemberEditor(props: {
   onChange: (member: EditableMember) => void;
 }) {
   const { member, onChange } = props;
+  const updateContributions = (
+    key: keyof EditableContributionPlan,
+    value: number,
+  ) => {
+    onChange({
+      ...member,
+      contributions: {
+        ...member.contributions,
+        [key]: value,
+      },
+    });
+  };
   const updateTaxProfile = (
     key: keyof EditableTaxProfile,
     value: number,
@@ -2330,6 +2352,115 @@ function MemberEditor(props: {
       </div>
 
       <div className="advanced-settings-grid">
+        <section className="advanced-settings-card">
+          <div className="member-header">
+            <h4>Contribution Plan</h4>
+          </div>
+          <p className="section-note">
+            Use this for ongoing accumulation before retirement, including
+            annual RRSP, TFSA, and taxable contributions plus remaining room.
+          </p>
+          <div className="form-section compact-form-section">
+            <label>
+              <FieldLabel
+                label="RRSP Contribution"
+                hint="Annual RRSP contribution the engine should add before retirement."
+              />
+              <input
+                type="number"
+                value={member.contributions.rrspAnnualContribution}
+                onChange={(event) =>
+                  updateContributions(
+                    "rrspAnnualContribution",
+                    readNumber(event.target.value),
+                  )
+                }
+              />
+            </label>
+            <label>
+              <FieldLabel
+                label="TFSA Contribution"
+                hint="Annual TFSA contribution before retirement."
+              />
+              <input
+                type="number"
+                value={member.contributions.tfsaAnnualContribution}
+                onChange={(event) =>
+                  updateContributions(
+                    "tfsaAnnualContribution",
+                    readNumber(event.target.value),
+                  )
+                }
+              />
+            </label>
+            <label>
+              <FieldLabel
+                label="Taxable Contribution"
+                hint="Annual contribution to non-registered savings."
+              />
+              <input
+                type="number"
+                value={member.contributions.nonRegisteredAnnualContribution}
+                onChange={(event) =>
+                  updateContributions(
+                    "nonRegisteredAnnualContribution",
+                    readNumber(event.target.value),
+                  )
+                }
+              />
+            </label>
+            <label>
+              <FieldLabel
+                label="Contribution Escalation (%)"
+                hint="Annual growth rate applied to the contribution plan."
+              />
+              <input
+                type="number"
+                step="0.1"
+                value={member.contributions.escalationRatePercent}
+                onChange={(event) =>
+                  updateContributions(
+                    "escalationRatePercent",
+                    readNumber(event.target.value),
+                  )
+                }
+              />
+            </label>
+            <label>
+              <FieldLabel
+                label="RRSP Room Remaining"
+                hint="Remaining RRSP contribution room if you want the engine to carry a room baseline."
+              />
+              <input
+                type="number"
+                value={member.contributions.rrspRoomRemaining}
+                onChange={(event) =>
+                  updateContributions(
+                    "rrspRoomRemaining",
+                    readNumber(event.target.value),
+                  )
+                }
+              />
+            </label>
+            <label>
+              <FieldLabel
+                label="TFSA Room Remaining"
+                hint="Remaining TFSA contribution room baseline."
+              />
+              <input
+                type="number"
+                value={member.contributions.tfsaRoomRemaining}
+                onChange={(event) =>
+                  updateContributions(
+                    "tfsaRoomRemaining",
+                    readNumber(event.target.value),
+                  )
+                }
+              />
+            </label>
+          </div>
+        </section>
+
         <section className="advanced-settings-card">
           <div className="member-header">
             <h4>Defined Benefit Pension</h4>
@@ -3632,6 +3763,7 @@ function createEditableMember(member: HouseholdMemberInput): EditableMember {
       lira: member.accounts.lira ?? 0,
       lif: member.accounts.lif ?? 0,
     },
+    contributions: createEditableContributionPlan(member),
     lockedInPolicy: createEditableLockedInPolicy(member),
     taxProfile: createEditableTaxProfile(member),
     beneficiaryDesignations: createEditableBeneficiaryDesignations(member),
@@ -3732,6 +3864,7 @@ function applyMemberScenario(
   member.profile.livesAloneForTaxYear = editable.livesAloneForTaxYear;
   member.profile.yearsResidedInCanadaAfter18 = editable.oasResidenceYears;
   member.employment.baseAnnualIncome = editable.employmentIncome;
+  applyContributionPlan(member, editable.contributions);
   member.employment.partTimeIncomeAfterRetirement = buildScheduledIncomeInput(
     editable.retirementPartTimeIncome,
     "UI retirement part-time income",
@@ -3782,6 +3915,27 @@ function applyBalances(member: HouseholdMemberInput, balances: EditableBalances)
   member.accounts.lif = balances.lif;
 }
 
+function applyContributionPlan(
+  member: HouseholdMemberInput,
+  contributions: EditableContributionPlan,
+) {
+  member.contributions.rrsp = contributions.rrspAnnualContribution;
+  member.contributions.tfsa = contributions.tfsaAnnualContribution;
+  member.contributions.nonRegistered =
+    contributions.nonRegisteredAnnualContribution;
+  member.contributions.contributionEscalationRate = fromPercentValue(
+    contributions.escalationRatePercent,
+  );
+  member.contributions.rrspRoomRemaining =
+    contributions.rrspRoomRemaining > 0
+      ? contributions.rrspRoomRemaining
+      : undefined;
+  member.contributions.tfsaRoomRemaining =
+    contributions.tfsaRoomRemaining > 0
+      ? contributions.tfsaRoomRemaining
+      : undefined;
+}
+
 function createRecurringIncome(
   annualAmount: number,
   startAge: number,
@@ -3815,6 +3969,21 @@ function createEditableDefinedBenefitPension(
     survivorContinuationPercent: toPercentValue(
       pension?.survivorContinuationPercent ?? 0,
     ),
+  };
+}
+
+function createEditableContributionPlan(
+  member: HouseholdMemberInput,
+): EditableContributionPlan {
+  return {
+    rrspAnnualContribution: member.contributions.rrsp,
+    tfsaAnnualContribution: member.contributions.tfsa,
+    nonRegisteredAnnualContribution: member.contributions.nonRegistered,
+    escalationRatePercent: toPercentValue(
+      member.contributions.contributionEscalationRate,
+    ),
+    rrspRoomRemaining: member.contributions.rrspRoomRemaining ?? 0,
+    tfsaRoomRemaining: member.contributions.tfsaRoomRemaining ?? 0,
   };
 }
 
@@ -4729,6 +4898,34 @@ function validateMember(
     });
   }
 
+  for (const [fieldLabel, value] of [
+    ["RRSP contribution", member.contributions.rrspAnnualContribution],
+    ["TFSA contribution", member.contributions.tfsaAnnualContribution],
+    [
+      "non-registered contribution",
+      member.contributions.nonRegisteredAnnualContribution,
+    ],
+    ["RRSP room remaining", member.contributions.rrspRoomRemaining],
+    ["TFSA room remaining", member.contributions.tfsaRoomRemaining],
+  ] as const) {
+    if (value < 0) {
+      issues.push({
+        level: "error",
+        message: `${label} ${fieldLabel} cannot be negative.`,
+      });
+    }
+  }
+
+  issues.push(
+    ...validatePercentScenarioValue(
+      `${label} contribution escalation`,
+      member.contributions.escalationRatePercent,
+      -10,
+      20,
+      10,
+    ),
+  );
+
   if (member.retirementPartTimeIncome.enabled) {
     if (member.retirementPartTimeIncome.annualAmount <= 0) {
       issues.push({
@@ -5242,6 +5439,32 @@ function normalizeImportedMember(
       member?.employmentIncome,
       fallback.employmentIncome,
     ),
+    contributions: {
+      rrspAnnualContribution: safeNumber(
+        member?.contributions?.rrspAnnualContribution,
+        fallback.contributions.rrspAnnualContribution,
+      ),
+      tfsaAnnualContribution: safeNumber(
+        member?.contributions?.tfsaAnnualContribution,
+        fallback.contributions.tfsaAnnualContribution,
+      ),
+      nonRegisteredAnnualContribution: safeNumber(
+        member?.contributions?.nonRegisteredAnnualContribution,
+        fallback.contributions.nonRegisteredAnnualContribution,
+      ),
+      escalationRatePercent: safeNumber(
+        member?.contributions?.escalationRatePercent,
+        fallback.contributions.escalationRatePercent,
+      ),
+      rrspRoomRemaining: safeNumber(
+        member?.contributions?.rrspRoomRemaining,
+        fallback.contributions.rrspRoomRemaining,
+      ),
+      tfsaRoomRemaining: safeNumber(
+        member?.contributions?.tfsaRoomRemaining,
+        fallback.contributions.tfsaRoomRemaining,
+      ),
+    },
     retirementPartTimeIncome: {
       enabled:
         typeof member?.retirementPartTimeIncome?.enabled === "boolean"
