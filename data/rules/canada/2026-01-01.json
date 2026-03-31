@@ -1,0 +1,166 @@
+{
+  "jurisdiction": "CA",
+  "effectiveFrom": "2026-01-01",
+  "sources": [
+    {
+      "label": "Government of Canada - CPP and OAS maximum figures, January to March 2026",
+      "url": "https://www.canada.ca/en/employment-social-development/programs/pensions/pension/statistics/2026-quarterly-january-march.html",
+      "accessedOn": "2026-03-30"
+    },
+    {
+      "label": "Government of Canada - OAS recovery tax",
+      "url": "https://www.canada.ca/en/services/benefits/publicpensions/old-age-security/recovery-tax.html",
+      "accessedOn": "2026-03-30"
+    },
+    {
+      "label": "CRA - TFSA contribution room",
+      "url": "https://www.canada.ca/en/revenue-agency/services/tax/individuals/topics/tax-free-savings-account/contributing/calculate-room.html",
+      "accessedOn": "2026-03-30"
+    },
+    {
+      "label": "CRA - MP, DB, RRSP, DPSP, ALDA, TFSA limits, YMPE and YAMPE",
+      "url": "https://www.canada.ca/en/revenue-agency/services/tax/registered-plans-administrators/pspa/mp-rrsp-dpsp-tfsa-limits-ympe.html",
+      "accessedOn": "2026-03-30"
+    },
+    {
+      "label": "CRA - Chart - Prescribed factors",
+      "url": "https://www.canada.ca/en/revenue-agency/services/tax/businesses/topics/completing-slips-summaries/t4rsp-t4rif-information-returns/payments/chart-prescribed-factors.html",
+      "accessedOn": "2026-03-30"
+    },
+    {
+      "label": "Retraite Quebec - Calculation of Your Retirement Pension Under the Quebec Pension Plan",
+      "url": "https://www.rrq.gouv.qc.ca/en/retraite/rrq/calcul_rente/Pages/calcul_rente.aspx",
+      "accessedOn": "2026-03-30"
+    }
+  ],
+  "cpp": {
+    "startAge": {
+      "min": 60,
+      "max": 70
+    },
+    "reductionPerMonthBefore65": 0.006,
+    "increasePerMonthAfter65": 0.007,
+    "maxMonthlyRetirementAt65": 1507.65,
+    "ybe": 3500,
+    "ympe": 74600,
+    "yampe": 85000,
+    "employeeContributionRateBase": 0.0595,
+    "employeeContributionRateSecondAdditional": 0.04,
+    "employeeMaximumContributionBase": 4230.45,
+    "employeeMaximumContributionSecondAdditional": 416,
+    "annualAdjustmentInPay": 0.02
+  },
+  "qpp": {
+    "startAge": {
+      "min": 60,
+      "max": 72
+    },
+    "notes": [
+      "QPP start and delayed-retirement rules differ from CPP and must be modeled separately.",
+      "Delayed retirement increases can continue to age 72."
+    ]
+  },
+  "oas": {
+    "startAge": {
+      "min": 65,
+      "max": 70
+    },
+    "increasePerMonthAfter65": 0.006,
+    "fullResidenceYearsAfter18": 40,
+    "monthlyMaximums": [
+      {
+        "ageBand": "65-74",
+        "amount": 742.31
+      },
+      {
+        "ageBand": "75+",
+        "amount": 816.54
+      }
+    ],
+    "recoveryPeriods": [
+      {
+        "periodLabel": "July 2025 to June 2026",
+        "incomeYear": 2024,
+        "lowerThreshold": 90997,
+        "upperThresholdAge65To74": 148451,
+        "upperThresholdAge75Plus": 154196
+      },
+      {
+        "periodLabel": "July 2026 to June 2027",
+        "incomeYear": 2025,
+        "lowerThreshold": 93454,
+        "upperThresholdAge65To74": 152062,
+        "upperThresholdAge75Plus": 157923
+      },
+      {
+        "periodLabel": "July 2027 to June 2028",
+        "incomeYear": 2026,
+        "lowerThreshold": 95323,
+        "upperThresholdAge65To74": 154708,
+        "upperThresholdAge75Plus": 160647
+      }
+    ],
+    "gisMaximums": [
+      {
+        "householdCase": "single-oas",
+        "monthlyMaximum": 1108.74,
+        "incomeCutoff": 22488,
+        "topUpCutoff": 10256
+      },
+      {
+        "householdCase": "spouse-no-oas",
+        "monthlyMaximum": 1108.74,
+        "incomeCutoff": 53904,
+        "topUpCutoff": 20512
+      },
+      {
+        "householdCase": "spouse-oas",
+        "monthlyMaximum": 667.41,
+        "incomeCutoff": 29712,
+        "topUpCutoff": 8704
+      },
+      {
+        "householdCase": "spouse-allowance",
+        "monthlyMaximum": 667.41,
+        "incomeCutoff": 41616,
+        "topUpCutoff": 8704
+      }
+    ],
+    "allowanceMaximumMonthly": 1409.72,
+    "allowanceSurvivorMaximumMonthly": 1680.47
+  },
+  "rrif": {
+    "formulaAtOrBelow70": "1 / (90 - age)",
+    "allOtherRrifFactorsByAge": {
+      "71": 0.0528,
+      "72": 0.054,
+      "73": 0.0553,
+      "74": 0.0567,
+      "75": 0.0582,
+      "76": 0.0598,
+      "77": 0.0617,
+      "78": 0.0636,
+      "79": 0.0658,
+      "80": 0.0682,
+      "81": 0.0708,
+      "82": 0.0738,
+      "83": 0.0771,
+      "84": 0.0808,
+      "85": 0.0851,
+      "86": 0.0899,
+      "87": 0.0955,
+      "88": 0.1021,
+      "89": 0.1099,
+      "90": 0.1192,
+      "91": 0.1306,
+      "92": 0.1449,
+      "93": 0.1634,
+      "94": 0.1879,
+      "95": 0.2
+    }
+  },
+  "registeredAccounts": {
+    "tfsaAnnualLimit": 7000,
+    "rrspAnnualLimit": 33810
+  }
+}

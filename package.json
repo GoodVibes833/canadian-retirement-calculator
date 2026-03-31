@@ -1,0 +1,14 @@
+{
+  "name": "canadian-retirement-calculator",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit false --outDir .build",
+    "smoke:golden": "npm run build && node scripts/runGoldenSmokeTests.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  }
+}
