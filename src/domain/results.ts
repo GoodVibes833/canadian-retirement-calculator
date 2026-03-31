@@ -10,6 +10,8 @@ export interface ProjectionYear {
   oneTimeNetCashFlow: number;
   taxes: number;
   oasRecoveryTax: number;
+  deathYearFinalReturnTaxAdjustment: number;
+  deathYearFinalReturnTaxableIncomeAdjustment: number;
   federalForeignTaxCredit: number;
   provincialForeignTaxCredit: number;
   quebecCareerExtensionCredit: number;

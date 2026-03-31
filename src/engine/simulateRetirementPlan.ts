@@ -162,6 +162,13 @@ interface TerminalEstateEstimate {
   warnings: string[];
 }
 
+interface DeathYearFinalReturnAdjustment {
+  taxAdjustment: number;
+  oasRecoveryTaxAdjustment: number;
+  taxableIncomeAdjustment: number;
+  warnings: string[];
+}
+
 interface MandatoryMinimumWithdrawalResult {
   rrifBySlot: Partial<Record<MemberSlot, number>>;
   lifBySlot: Partial<Record<MemberSlot, number>>;
@@ -405,7 +412,7 @@ function projectSingleYear(
     ...oneTimeCashFlow.descriptions,
   );
 
-  const beforeTaxIncome =
+  let beforeTaxIncome =
     sumMemberFrames(memberFrames, (frame) => frame.employmentIncome) +
     sumMemberFrames(memberFrames, (frame) => frame.cppQppIncome) +
     sumMemberFrames(memberFrames, (frame) => frame.oasIncome) +
@@ -416,16 +423,33 @@ function projectSingleYear(
     drawdown.rrspRrifWithdrawals +
     drawdown.lifWithdrawals +
     sumMemberTaxState(memberTaxState, (state) => state.taxableCapitalGains);
-  const taxes = sumMemberTaxState(memberTaxState, (state) => state.taxes);
-  const oasRecoveryTax = sumMemberTaxState(
+  let taxes = sumMemberTaxState(memberTaxState, (state) => state.taxes);
+  let oasRecoveryTax = sumMemberTaxState(
     memberTaxState,
     (state) => state.oasRecoveryTax,
   );
+  const deathYearFinalReturnAdjustment = estimateDeathYearFinalReturnAdjustment(
+    context,
+    period,
+    memberFrames,
+    memberTaxState,
+    taxAttributes,
+    balances,
+  );
+  beforeTaxIncome +=
+    deathYearFinalReturnAdjustment.taxableIncomeAdjustment;
+  taxes += deathYearFinalReturnAdjustment.taxAdjustment;
+  oasRecoveryTax += deathYearFinalReturnAdjustment.oasRecoveryTaxAdjustment;
+  warnings.push(...deathYearFinalReturnAdjustment.warnings);
+  const totalDeathYearFinalReturnTaxAdjustment =
+    deathYearFinalReturnAdjustment.taxAdjustment +
+    deathYearFinalReturnAdjustment.oasRecoveryTaxAdjustment;
   const afterTaxIncome =
     baseAfterTaxCash +
     incomeTestedBenefits.totalAnnual +
     drawdown.netFromWithdrawals +
-    quebecTaxReliefMeasuresCreditApplied;
+    quebecTaxReliefMeasuresCreditApplied -
+    totalDeathYearFinalReturnTaxAdjustment;
   const shortfallOrSurplus = afterTaxIncome - requiredCash;
 
   if (shortfallOrSurplus > 0) {
@@ -465,6 +489,12 @@ function projectSingleYear(
       ),
       taxes: roundCurrency(taxes),
       oasRecoveryTax: roundCurrency(oasRecoveryTax),
+      deathYearFinalReturnTaxAdjustment: roundCurrency(
+        totalDeathYearFinalReturnTaxAdjustment,
+      ),
+      deathYearFinalReturnTaxableIncomeAdjustment: roundCurrency(
+        deathYearFinalReturnAdjustment.taxableIncomeAdjustment,
+      ),
       federalForeignTaxCredit: roundCurrency(
         sumMemberTaxState(memberTaxState, (state) => state.federalForeignTaxCredit),
       ),
@@ -3509,6 +3539,227 @@ function buildYearWarnings(
   return warnings;
 }
 
+function estimateDeathYearFinalReturnAdjustment(
+  context: NormalizedContext,
+  period: PeriodState,
+  memberFrames: MemberFrame[],
+  memberTaxState: Partial<Record<MemberSlot, MemberTaxState>>,
+  taxAttributes: HouseholdTaxAttributeLedger,
+  balances: HouseholdLedger,
+): DeathYearFinalReturnAdjustment {
+  const terminalFrames = memberFrames.filter((frame) =>
+    isDeathYearFinalReturnFrame(context, frame),
+  );
+
+  if (terminalFrames.length === 0) {
+    return {
+      taxAdjustment: 0,
+      oasRecoveryTaxAdjustment: 0,
+      taxableIncomeAdjustment: 0,
+      warnings: [],
+    };
+  }
+
+  const survivorFrames = memberFrames.filter(
+    (frame) => frame.isAlive && !terminalFrames.some((terminal) => terminal.slot === frame.slot),
+  );
+
+  if (survivorFrames.length === 1 && terminalFrames.length === 1) {
+    return {
+      taxAdjustment: 0,
+      oasRecoveryTaxAdjustment: 0,
+      taxableIncomeAdjustment: 0,
+      warnings: [
+        "Death-year final return currently assumes a baseline spousal rollover for remaining registered and capital-property balances when a surviving spouse or common-law partner remains in the model. Beneficiary designations and non-rollover assets will be modeled separately.",
+      ],
+    };
+  }
+
+  let taxAdjustment = 0;
+  let oasRecoveryTaxAdjustment = 0;
+  let taxableIncomeAdjustment = 0;
+  const warnings: string[] = [];
+
+  for (const frame of terminalFrames) {
+    const baseState = memberTaxState[frame.slot];
+
+    if (!baseState) {
+      continue;
+    }
+
+    const account = getAccountLedgerBySlot(balances, frame.slot);
+    const estimate = estimateFinalReturnTaxIncrementForAccount(
+      context,
+      period.calendarYear,
+      baseState,
+      getTaxAttributeLedgerBySlot(taxAttributes, frame.slot),
+      account,
+    );
+
+    taxAdjustment += estimate.taxAdjustment;
+    oasRecoveryTaxAdjustment += estimate.oasRecoveryTaxAdjustment;
+    taxableIncomeAdjustment += estimate.taxableIncomeAdjustment;
+    warnings.push(...estimate.warnings);
+
+    if ((frame.member.accounts.dcPension ?? 0) > 0.01 || account.dcPension > 0.01) {
+      warnings.push(
+        `Death-year final return does not yet apply plan-specific death treatment to ${labelForSlot(
+          frame.slot,
+        ).toLowerCase()}'s DC pension balance. Estate and death-year tax output may still be understated or overstated for that account.`,
+      );
+    }
+  }
+
+  if (taxAdjustment !== 0 || oasRecoveryTaxAdjustment !== 0) {
+    warnings.push(
+      "Death-year final return now adds a baseline terminal tax adjustment for remaining registered balances and deemed taxable capital gains when no surviving spouse remains in the model. Optional returns and exact CRA final-return elections are still incomplete.",
+    );
+  }
+
+  return {
+    taxAdjustment,
+    oasRecoveryTaxAdjustment,
+    taxableIncomeAdjustment,
+    warnings,
+  };
+}
+
+function isDeathYearFinalReturnFrame(
+  context: NormalizedContext,
+  frame: MemberFrame,
+): boolean {
+  if (!frame.isAlive) {
+    return false;
+  }
+
+  if (frame.deathOccursThisYear) {
+    return true;
+  }
+
+  return (
+    context.input.household.householdType === "single" &&
+    frame.age >= frame.member.profile.lifeExpectancy
+  );
+}
+
+function estimateFinalReturnTaxIncrementForAccount(
+  context: NormalizedContext,
+  calendarYear: number,
+  baseState: MemberTaxState,
+  taxAttributeLedger: TaxAttributeLedger,
+  account: AccountLedger,
+): DeathYearFinalReturnAdjustment {
+  const capitalGainsInclusionRate =
+    context.rules.taxableAccounts.capitalGainsInclusionRate;
+  const terminalOrdinaryIncome =
+    account.rrsp + account.rrif + account.lira + account.lif;
+  const terminalTaxableCapitalGains = Math.max(
+    0,
+    account.nonRegistered - account.nonRegisteredCostBase,
+  ) * capitalGainsInclusionRate;
+  const terminalAllowableCapitalLosses = Math.max(
+    0,
+    account.nonRegisteredCostBase - account.nonRegistered,
+  ) * capitalGainsInclusionRate;
+  const ordinaryTaxableIncome =
+    baseState.ordinaryTaxableIncome + terminalOrdinaryIncome;
+  const grossTaxableCapitalGains =
+    baseState.grossTaxableCapitalGains + terminalTaxableCapitalGains;
+  const allowableCapitalLossesCurrentYear =
+    baseState.allowableCapitalLossesCurrentYear + terminalAllowableCapitalLosses;
+  const currentYearNetCapitalLoss = Math.max(
+    0,
+    allowableCapitalLossesCurrentYear - grossTaxableCapitalGains,
+  );
+  const remainingTaxableCapitalGainsAfterCurrentLosses = Math.max(
+    0,
+    grossTaxableCapitalGains - allowableCapitalLossesCurrentYear,
+  );
+  const openingNetCapitalLossCarryforward = Math.max(
+    0,
+    taxAttributeLedger.netCapitalLossCarryforward,
+  );
+  const netCapitalLossCarryforwardUsed = Math.min(
+    openingNetCapitalLossCarryforward,
+    remainingTaxableCapitalGainsAfterCurrentLosses,
+  );
+  const taxableCapitalGains = Math.max(
+    0,
+    remainingTaxableCapitalGainsAfterCurrentLosses -
+      netCapitalLossCarryforwardUsed,
+  );
+  const remainingCapitalLossPoolForOtherIncome = Math.max(
+    0,
+    openingNetCapitalLossCarryforward -
+      netCapitalLossCarryforwardUsed +
+      currentYearNetCapitalLoss,
+  );
+  const netOrdinaryTaxableIncome = Math.max(
+    0,
+    ordinaryTaxableIncome - remainingCapitalLossPoolForOtherIncome,
+  );
+  const taxableIncome = netOrdinaryTaxableIncome + taxableCapitalGains;
+  const taxEstimate = estimateIncomeTax({
+    taxableIncome,
+    province: baseState.province,
+    calendarYear,
+    age: baseState.age,
+    eligibleWorkIncome: baseState.eligibleWorkIncome,
+    eligiblePensionIncome: baseState.eligiblePensionIncome,
+    eligibleDividendIncome: baseState.eligibleDividendIncome,
+    nonEligibleDividendIncome: baseState.nonEligibleDividendIncome,
+    foreignNonBusinessIncome: baseState.foreignNonBusinessIncome,
+    foreignNonBusinessIncomeTaxPaid: baseState.foreignNonBusinessIncomeTaxPaid,
+  });
+  const oasRecoveryTax = estimateOasRecoveryTax(
+    context,
+    calendarYear,
+    taxableIncome,
+    baseState.oasIncome,
+  );
+  const warnings = [...taxEstimate.warnings];
+
+  if (
+    remainingCapitalLossPoolForOtherIncome > 0 &&
+    ordinaryTaxableIncome > netOrdinaryTaxableIncome
+  ) {
+    warnings.push(
+      "Death-year final return baseline lets available net capital losses reduce other income after taxable capital gains are exhausted, consistent with CRA final-return treatment. GRE carryback elections still remain outside the current scaffold.",
+    );
+  }
+
+  if (terminalOrdinaryIncome > 0) {
+    warnings.push(
+      `Death-year final return added ${roundCurrency(
+        terminalOrdinaryIncome,
+      )} of remaining registered-plan balances to taxable income on the modeled final return baseline.`,
+    );
+  }
+
+  if (terminalTaxableCapitalGains > 0) {
+    warnings.push(
+      `Death-year final return added ${roundCurrency(
+        terminalTaxableCapitalGains,
+      )} of taxable capital gains from the deemed disposition of remaining non-registered assets.`,
+    );
+  }
+
+  if (terminalAllowableCapitalLosses > 0) {
+    warnings.push(
+      `Death-year final return recognized ${roundCurrency(
+        terminalAllowableCapitalLosses,
+      )} of allowable capital losses from remaining non-registered assets on the final return baseline.`,
+    );
+  }
+
+  return {
+    taxAdjustment: taxEstimate.totalTax - baseState.taxes,
+    oasRecoveryTaxAdjustment: oasRecoveryTax - baseState.oasRecoveryTax,
+    taxableIncomeAdjustment: taxableIncome - baseState.taxableIncome,
+    warnings,
+  };
+}
+
 function summarizeProjection(
   context: NormalizedContext,
   years: ProjectionYear[],
@@ -3754,6 +4005,7 @@ function buildAssumptionList(context: NormalizedContext): string[] {
     "Survivor years now include baseline CPP/QPP survivor-pension support when the surviving spouse is not already on a combined public-pension path or when a manual annual survivor-benefit override is supplied, but full Service Canada / Retraite Quebec combined-benefit math remains incomplete.",
     "Survivor-year spending defaults to 72% of the couple after-tax spending target unless expenseProfile.survivorSpendingPercentOfCouple is explicitly provided.",
     "Death years use a baseline mid-year heuristic: recurring income, contributions, and mandatory RRIF/LIF withdrawals are prorated to 50%, and couple spending transitions halfway toward the survivor spending path for that year.",
+    "Death-year annual results now add a baseline CRA final-return adjustment when no surviving spouse remains in the model: remaining RRSP / RRIF / LIRA / LIF balances are treated as taxable, remaining non-registered assets are treated as deemed dispositions, and available net capital losses can reduce other income on the final-return baseline. Optional returns, beneficiary designations, and joint-ownership estate exclusions remain separate roadmap items.",
     "Projection length now follows the longest modeled remaining lifetime in the household, capped by household.maxProjectionAge relative to the primary member's age.",
     "Summary estate values now include a baseline projection-end liquidation proxy: remaining RRSP / RRIF / LIRA / LIF balances are treated as taxable on a terminal return, net capital losses can offset capital gains and then other income on a final-return baseline, and ON / BC / AB probate-style estate administration costs are approximated when the projection reaches the modeled final death. Beneficiary designations, joint ownership, Quebec will-form detail, and DC pension death treatment remain incomplete.",
   ];

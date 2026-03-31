@@ -920,6 +920,7 @@ const taxChecks = [
     label: "Quebec Schedule B age and retirement-income amounts reduce tax for a single retiree",
     check() {
       const input = readJson("data/fixtures/quebec/qc-age-retirement-credit.json");
+      input.household.primary.profile.lifeExpectancy = 69;
       const result = simulateRetirementPlan(input, rules);
       const firstYear = result.years[0];
 
@@ -1080,6 +1081,8 @@ const taxChecks = [
     check() {
       const baseInput = readJson("data/fixtures/quebec/qc-living-alone-credit.json");
       const aloneInput = readJson("data/fixtures/quebec/qc-living-alone-credit.json");
+      baseInput.household.primary.profile.lifeExpectancy = 69;
+      aloneInput.household.primary.profile.lifeExpectancy = 69;
       baseInput.household.primary.profile.livesAloneForTaxYear = false;
 
       const baseResult = simulateRetirementPlan(baseInput, rules);
@@ -1396,6 +1399,74 @@ const taxChecks = [
         (result.summary.estimatedAfterTaxEstateValue ?? 0) <
           (result.summary.estimatedEstateValue ?? 0),
         "After-tax estate value should be below the gross estate value when terminal tax and estate administration cost apply.",
+      );
+    },
+  },
+  {
+    id: "T41",
+    label: "Single death year applies a final-return tax adjustment",
+    check() {
+      const deathYearInput = readJson("data/fixtures/golden/golden-on-single-saver.json");
+      const nonDeathInput = readJson("data/fixtures/golden/golden-on-single-saver.json");
+
+      for (const input of [deathYearInput, nonDeathInput]) {
+        input.household.primary.profile.currentAge = 65;
+        input.household.primary.profile.retirementAge = 65;
+        input.household.maxProjectionAge = 65;
+        input.household.primary.employment.baseAnnualIncome = 0;
+        input.household.primary.employment.bonusAnnualIncome = 0;
+        input.household.primary.accounts.rrsp = 250000;
+        input.household.primary.accounts.rrif = 0;
+        input.household.primary.accounts.tfsa = 0;
+        input.household.primary.accounts.nonRegistered = 0;
+        input.household.primary.accounts.cash = 10000;
+        input.household.primary.contributions.rrsp = 0;
+        input.household.primary.contributions.tfsa = 0;
+        input.household.primary.contributions.nonRegistered = 0;
+      }
+
+      deathYearInput.household.primary.profile.lifeExpectancy = 65;
+      nonDeathInput.household.primary.profile.lifeExpectancy = 66;
+
+      const deathYearResult = simulateRetirementPlan(deathYearInput, rules);
+      const nonDeathResult = simulateRetirementPlan(nonDeathInput, rules);
+      const deathYear = deathYearResult.years[0];
+      const nonDeathYear = nonDeathResult.years[0];
+
+      assert(
+        deathYear.deathYearFinalReturnTaxAdjustment > 0,
+        "A single-household death year with remaining RRSP assets should report a positive death-year final-return tax adjustment.",
+      );
+      assert(
+        deathYear.deathYearFinalReturnTaxableIncomeAdjustment > 0,
+        "A single-household death year with remaining RRSP assets should add taxable income on the final return baseline.",
+      );
+      assert(
+        deathYear.taxes + deathYear.oasRecoveryTax >
+          nonDeathYear.taxes + nonDeathYear.oasRecoveryTax,
+        "The death-year final-return adjustment should increase total tax burden versus an otherwise identical non-death year.",
+      );
+    },
+  },
+  {
+    id: "T42",
+    label: "Death year with a surviving spouse assumes baseline spousal rollover",
+    check() {
+      const input = readJson("data/fixtures/golden/golden-on-couple-core.json");
+      input.household.partner.profile.lifeExpectancy = 56;
+
+      const result = simulateRetirementPlan(input, rules);
+      const firstYear = result.years[0];
+
+      assert(
+        firstYear.deathYearFinalReturnTaxAdjustment === 0,
+        "When a surviving spouse remains in the model, death-year final-return tax should stay at zero under the baseline spousal-rollover assumption.",
+      );
+      assert(
+        firstYear.warnings.some((warning) =>
+          warning.includes("spousal rollover"),
+        ),
+        "Death year with a surviving spouse should warn that remaining balances are being handled with a baseline spousal-rollover assumption.",
       );
     },
   },
