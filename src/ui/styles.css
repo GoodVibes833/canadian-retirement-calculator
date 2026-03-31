@@ -289,6 +289,10 @@ select {
   margin-top: 18px;
 }
 
+.compare-form {
+  margin-bottom: 0;
+}
+
 label {
   display: flex;
   flex-direction: column;
@@ -298,6 +302,26 @@ label {
 
 label span {
   font-size: 0.85rem;
+}
+
+.label-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.help-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(31, 95, 77, 0.12);
+  color: #1f5f4d;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: help;
 }
 
 input,
@@ -604,6 +628,41 @@ select {
   gap: 12px;
 }
 
+.chart-controls {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.range-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.range-pill {
+  border: 1px solid rgba(41, 69, 61, 0.12);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #23433c;
+  cursor: pointer;
+}
+
+.range-pill-active {
+  border-color: rgba(23, 77, 63, 0.42);
+  background: rgba(31, 95, 77, 0.12);
+  color: #1f5f4d;
+}
+
+.slider-group {
+  gap: 10px;
+}
+
+.slider-group input[type="range"] {
+  padding: 0;
+}
+
 .chart-header {
   display: flex;
   align-items: flex-start;
@@ -649,6 +708,17 @@ select {
   stroke: rgba(160, 83, 50, 0.24);
   stroke-width: 1.25;
   stroke-dasharray: 5 5;
+}
+
+.chart-focus-line {
+  stroke: rgba(31, 95, 77, 0.28);
+  stroke-width: 1.25;
+  stroke-dasharray: 4 4;
+}
+
+.chart-focus-point {
+  stroke: rgba(255, 252, 246, 0.92);
+  stroke-width: 2;
 }
 
 .chart-footer,

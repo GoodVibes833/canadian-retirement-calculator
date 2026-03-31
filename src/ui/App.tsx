@@ -86,6 +86,14 @@ type ScenarioTransferEnvelope = {
   scenario: EditableScenario;
 };
 
+type ComparisonMode = "none" | "preset-baseline" | "saved-snapshot";
+type ChartRange = 10 | 18 | "all";
+
+type ComparisonState = {
+  label: string;
+  runState: RunState;
+};
+
 type IntakeStepId = "setup" | "people" | "strategy" | "review";
 
 const provinceOptions: ProvinceCode[] = ["ON", "BC", "AB", "QC"];
@@ -143,12 +151,17 @@ export function App() {
   const [runState, setRunState] = useState<RunState>(() =>
     buildRunState(defaultUiPreset, initialScenario),
   );
+  const [comparisonMode, setComparisonMode] = useState<ComparisonMode>("none");
+  const [compareSavedScenarioId, setCompareSavedScenarioId] = useState("");
+  const [comparisonState, setComparisonState] = useState<ComparisonState | null>(null);
   const [activeStep, setActiveStep] = useState<IntakeStepId>("setup");
   const [savedScenarios, setSavedScenarios] = useState<SavedScenarioRecord[]>(
     () => readSavedScenarios(),
   );
   const [lastLoadedSavedId, setLastLoadedSavedId] = useState<string | null>(null);
   const [transferStatus, setTransferStatus] = useState<TransferStatus | null>(null);
+  const [chartRange, setChartRange] = useState<ChartRange>(18);
+  const [focusedYearIndex, setFocusedYearIndex] = useState(0);
 
   const selectedPreset =
     uiPresets.find((preset) => preset.id === selectedPresetId) ?? defaultUiPreset;
@@ -161,7 +174,12 @@ export function App() {
   const advisoryIssues = validationIssues.filter((issue) => issue.level === "warning");
   const firstYear = runState.result.years[0];
   const previewYears = runState.result.years.slice(0, 10);
-  const chartYears = runState.result.years.slice(0, 18);
+  const chartYears = getChartYears(runState.result, chartRange);
+  const clampedFocusedYearIndex = Math.min(
+    focusedYearIndex,
+    Math.max(0, chartYears.length - 1),
+  );
+  const focusedYear = chartYears[clampedFocusedYearIndex];
   const topWarnings = Array.from(
     new Set([
       ...runState.result.summary.notableWarnings,
@@ -239,6 +257,9 @@ export function App() {
       values: chartYears.map((year) => year.shortfallOrSurplus),
     },
   ];
+  const comparisonFacts = comparisonState
+    ? buildComparisonFacts(runState.result, comparisonState.runState.result)
+    : [];
   const reviewFacts = buildReviewFacts(scenario, runState.result);
   const outcomeNarrative = buildOutcomeNarrative(
     runState.result,
@@ -252,14 +273,38 @@ export function App() {
           blockingIssues.length === 1 ? "" : "s"
         } before running the engine.`
       : "Runs the existing 2026 Canada rules snapshot and the same pure engine already passing the Golden regression set.";
+  const focusFacts = focusedYear ? buildFocusedYearFacts(focusedYear) : [];
+
+  const refreshComparisonState = (
+    nextSelectedPreset: UiPreset,
+    nextSavedScenarios: SavedScenarioRecord[] = savedScenarios,
+  ) => {
+    setComparisonState(
+      buildComparisonState(
+        comparisonMode,
+        compareSavedScenarioId,
+        nextSelectedPreset,
+        nextSavedScenarios,
+      ),
+    );
+  };
 
   const handlePresetSelect = (preset: UiPreset) => {
     const nextScenario = createEditableScenario(preset);
     setSelectedPresetId(preset.id);
     setScenario(nextScenario);
     setRunState(buildRunState(preset, nextScenario));
+    setFocusedYearIndex(0);
     setLastLoadedSavedId(null);
     setTransferStatus(null);
+    setComparisonState(
+      buildComparisonState(
+        comparisonMode,
+        compareSavedScenarioId,
+        preset,
+        savedScenarios,
+      ),
+    );
     setActiveStep("setup");
   };
 
@@ -267,8 +312,10 @@ export function App() {
     const resetScenario = createEditableScenario(selectedPreset);
     setScenario(resetScenario);
     setRunState(buildRunState(selectedPreset, resetScenario));
+    setFocusedYearIndex(0);
     setLastLoadedSavedId(null);
     setTransferStatus(null);
+    refreshComparisonState(selectedPreset);
   };
 
   const handleCalculate = () => {
@@ -283,6 +330,8 @@ export function App() {
     }
 
     setRunState(buildRunState(selectedPreset, scenario));
+    setFocusedYearIndex(0);
+    refreshComparisonState(selectedPreset);
     setTransferStatus(null);
   };
 
@@ -302,6 +351,7 @@ export function App() {
     setSavedScenarios(nextSavedScenarios);
     writeSavedScenarios(nextSavedScenarios);
     setLastLoadedSavedId(snapshot.id);
+    refreshComparisonState(selectedPreset, nextSavedScenarios);
     setTransferStatus({
       tone: "success",
       message: `Saved snapshot "${snapshot.label}".`,
@@ -316,11 +366,13 @@ export function App() {
     setSelectedPresetId(preset.id);
     setScenario(nextScenario);
     setRunState(buildRunState(preset, nextScenario));
+    setFocusedYearIndex(0);
     setLastLoadedSavedId(savedScenario.id);
     setTransferStatus({
       tone: "success",
       message: `Loaded saved scenario "${savedScenario.label}".`,
     });
+    refreshComparisonState(preset);
     setActiveStep("review");
   };
 
@@ -332,6 +384,14 @@ export function App() {
     writeSavedScenarios(nextSavedScenarios);
     if (lastLoadedSavedId === savedScenarioId) {
       setLastLoadedSavedId(null);
+    }
+    if (compareSavedScenarioId === savedScenarioId) {
+      setCompareSavedScenarioId("");
+      setComparisonState(
+        buildComparisonState("none", "", selectedPreset, nextSavedScenarios),
+      );
+    } else {
+      refreshComparisonState(selectedPreset, nextSavedScenarios);
     }
     setTransferStatus({
       tone: "success",
@@ -397,11 +457,13 @@ export function App() {
       setSelectedPresetId(preset.id);
       setScenario(normalizedScenario);
       setRunState(buildRunState(preset, normalizedScenario));
+      setFocusedYearIndex(0);
       setLastLoadedSavedId(null);
       setTransferStatus({
         tone: "success",
         message: `Imported scenario "${normalizedScenario.title}".`,
       });
+      refreshComparisonState(preset);
       setActiveStep("review");
     } catch (error) {
       setTransferStatus({
@@ -430,6 +492,45 @@ export function App() {
     if (nextStep) {
       setActiveStep(nextStep.id);
     }
+  };
+
+  const handleComparisonModeChange = (
+    event: ChangeEvent<HTMLSelectElement>,
+  ) => {
+    const nextMode = event.target.value as ComparisonMode;
+    const nextSavedId =
+      nextMode === "saved-snapshot"
+        ? compareSavedScenarioId || savedScenarios[0]?.id || ""
+        : "";
+    setComparisonMode(nextMode);
+    if (nextMode !== "saved-snapshot") {
+      setCompareSavedScenarioId("");
+    } else {
+      setCompareSavedScenarioId(nextSavedId);
+    }
+    setComparisonState(
+      buildComparisonState(nextMode, nextSavedId, selectedPreset, savedScenarios),
+    );
+  };
+
+  const handleCompareSavedScenarioChange = (
+    event: ChangeEvent<HTMLSelectElement>,
+  ) => {
+    const nextSavedId = event.target.value;
+    setCompareSavedScenarioId(nextSavedId);
+    setComparisonState(
+      buildComparisonState(
+        comparisonMode,
+        nextSavedId,
+        selectedPreset,
+        savedScenarios,
+      ),
+    );
+  };
+
+  const handleChartRangeChange = (nextRange: ChartRange) => {
+    setChartRange(nextRange);
+    setFocusedYearIndex(0);
   };
 
   return (
@@ -537,7 +638,10 @@ export function App() {
                 </p>
                 <div className="form-section">
                   <label>
-                    <span>Scenario Title</span>
+                    <FieldLabel
+                      label="Scenario Title"
+                      hint="Used for saved snapshots and exported files."
+                    />
                     <input
                       type="text"
                       value={scenario.title}
@@ -550,7 +654,10 @@ export function App() {
                     />
                   </label>
                   <label>
-                    <span>Province</span>
+                    <FieldLabel
+                      label="Province"
+                      hint="Provincial tax and some retirement rules depend on this selection."
+                    />
                     <select
                       value={scenario.province}
                       onChange={(event) =>
@@ -568,7 +675,10 @@ export function App() {
                     </select>
                   </label>
                   <label>
-                    <span>Household Type</span>
+                    <FieldLabel
+                      label="Household Type"
+                      hint="Choose single, married, or common-law so survivor and household tax logic are modeled correctly."
+                    />
                     <select
                       value={scenario.householdType}
                       onChange={(event) => {
@@ -592,7 +702,10 @@ export function App() {
                     </select>
                   </label>
                   <label>
-                    <span>Desired After-Tax Spending</span>
+                    <FieldLabel
+                      label="Desired After-Tax Spending"
+                      hint="Annual lifestyle target after tax, not gross income."
+                    />
                     <input
                       type="number"
                       value={scenario.desiredAfterTaxSpending}
@@ -659,7 +772,10 @@ export function App() {
                 </p>
                 <div className="form-section">
                   <label>
-                    <span>Withdrawal Order</span>
+                    <FieldLabel
+                      label="Withdrawal Order"
+                      hint="Sets the broad drawdown sequence the engine uses across taxable, registered, and TFSA assets."
+                    />
                     <select
                       value={scenario.withdrawalOrder}
                       onChange={(event) =>
@@ -677,7 +793,10 @@ export function App() {
                     </select>
                   </label>
                   <label>
-                    <span>Survivor Spending % of Couple</span>
+                    <FieldLabel
+                      label="Survivor Spending % of Couple"
+                      hint="How much of couple spending remains after one partner dies."
+                    />
                     <input
                       type="number"
                       value={scenario.survivorSpendingPercent}
@@ -983,11 +1102,149 @@ export function App() {
 
           <div className="results-grid">
             <section className="results-card results-card-wide">
+              <div className="panel-header">
+                <div>
+                  <p className="section-kicker">Compare</p>
+                  <h3>Scenario Compare Mode</h3>
+                </div>
+              </div>
+              <div className="form-section compare-form">
+                <label>
+                  <FieldLabel
+                    label="Compare Against"
+                    hint="Use this to compare the current run with the preset baseline or a saved snapshot."
+                  />
+                  <select
+                    value={comparisonMode}
+                    onChange={handleComparisonModeChange}
+                  >
+                    <option value="none">No compare</option>
+                    <option value="preset-baseline">Preset baseline</option>
+                    <option value="saved-snapshot">Saved snapshot</option>
+                  </select>
+                </label>
+                {comparisonMode === "saved-snapshot" ? (
+                  <label>
+                    <FieldLabel
+                      label="Saved Snapshot"
+                      hint="Choose which saved scenario should act as the comparison reference."
+                    />
+                    <select
+                      value={compareSavedScenarioId}
+                      onChange={handleCompareSavedScenarioChange}
+                    >
+                      {savedScenarios.length > 0 ? (
+                        savedScenarios.map((savedScenario) => (
+                          <option key={savedScenario.id} value={savedScenario.id}>
+                            {savedScenario.label}
+                          </option>
+                        ))
+                      ) : (
+                        <option value="">No saved scenarios available</option>
+                      )}
+                    </select>
+                  </label>
+                ) : null}
+              </div>
+              {comparisonState ? (
+                <>
+                  <p className="section-note">
+                    Comparing the current run against{" "}
+                    <strong>{comparisonState.label}</strong>.
+                  </p>
+                  <div className="review-grid">
+                    {comparisonFacts.map((fact) => (
+                      <article key={fact.label} className="review-card">
+                        <span>{fact.label}</span>
+                        <strong>{fact.value}</strong>
+                      </article>
+                    ))}
+                  </div>
+                  <ul className="warning-list narrative-list">
+                    {buildComparisonNarrative(
+                      runState.result,
+                      comparisonState.runState.result,
+                    ).map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ul>
+                </>
+              ) : (
+                <p className="section-note">
+                  Turn compare mode on to see deltas against a baseline or a
+                  saved snapshot.
+                </p>
+              )}
+            </section>
+
+            <section className="results-card results-card-wide">
+              <div className="panel-header">
+                <div>
+                  <p className="section-kicker">Inspect</p>
+                  <h3>Chart Controls</h3>
+                </div>
+              </div>
+              <div className="chart-controls">
+                <div className="range-pills">
+                  {[10, 18, "all"].map((option) => (
+                    <button
+                      key={String(option)}
+                      className={
+                        chartRange === option
+                          ? "range-pill range-pill-active"
+                          : "range-pill"
+                      }
+                      type="button"
+                      onClick={() => handleChartRangeChange(option as ChartRange)}
+                    >
+                      {option === "all" ? "All years" : `${option} years`}
+                    </button>
+                  ))}
+                </div>
+                {chartYears.length > 1 ? (
+                  <label className="slider-group">
+                    <FieldLabel
+                      label={`Focused Projection Year: ${focusedYear?.calendarYear ?? "N/A"}`}
+                      hint="Move the focus marker across the chart window to inspect a specific projection year."
+                    />
+                    <input
+                      type="range"
+                      min="0"
+                      max={String(chartYears.length - 1)}
+                      value={String(clampedFocusedYearIndex)}
+                      onChange={(event) =>
+                        setFocusedYearIndex(readNumber(event.target.value))
+                      }
+                    />
+                  </label>
+                ) : null}
+              </div>
+              {focusedYear ? (
+                <div className="review-grid">
+                  {focusFacts.map((fact) => (
+                    <article key={fact.label} className="review-card">
+                      <span>{fact.label}</span>
+                      <strong>{fact.value}</strong>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="section-note">
+                  Not enough projection years are available for focused chart
+                  inspection.
+                </p>
+              )}
+            </section>
+
+            <section className="results-card results-card-wide">
               <TrendChart
                 title="Cash Flow Curve"
-                subtitle="First 18 years of after-tax income, spending, and taxes."
+                subtitle={`Showing ${
+                  chartRange === "all" ? "all available" : `${chartRange}`
+                } years of after-tax income, spending, and taxes.`}
                 labels={chartYears.map((year) => String(year.calendarYear))}
                 series={cashFlowChartSeries}
+                focusIndex={clampedFocusedYearIndex}
               />
             </section>
 
@@ -997,6 +1254,7 @@ export function App() {
                 subtitle="Total projected household balances versus an after-tax proxy."
                 labels={chartYears.map((year) => String(year.calendarYear))}
                 series={balanceChartSeries}
+                focusIndex={clampedFocusedYearIndex}
               />
             </section>
 
@@ -1006,6 +1264,7 @@ export function App() {
                 subtitle="Positive values mean surplus. Negative values mean the plan is falling short."
                 labels={chartYears.map((year) => String(year.calendarYear))}
                 series={gapChartSeries}
+                focusIndex={clampedFocusedYearIndex}
               />
             </section>
 
@@ -1272,7 +1531,10 @@ function MemberEditor(props: {
       </div>
       <div className="form-section">
         <label>
-          <span>Current Age</span>
+          <FieldLabel
+            label="Current Age"
+            hint="Current age at the start of the projection."
+          />
           <input
             type="number"
             value={member.age}
@@ -1282,7 +1544,10 @@ function MemberEditor(props: {
           />
         </label>
         <label>
-          <span>Retirement Age</span>
+          <FieldLabel
+            label="Retirement Age"
+            hint="Age when employment income is expected to stop or drop materially."
+          />
           <input
             type="number"
             value={member.retirementAge}
@@ -1295,7 +1560,10 @@ function MemberEditor(props: {
           />
         </label>
         <label>
-          <span>Life Expectancy</span>
+          <FieldLabel
+            label="Life Expectancy"
+            hint="Planning horizon for this member, not a guaranteed lifespan."
+          />
           <input
             type="number"
             value={member.lifeExpectancy}
@@ -1308,7 +1576,10 @@ function MemberEditor(props: {
           />
         </label>
         <label>
-          <span>Pension Plan</span>
+          <FieldLabel
+            label="Pension Plan"
+            hint="CPP is typical outside Quebec. QPP is typical inside Quebec."
+          />
           <select
             value={member.pensionPlan}
             onChange={(event) =>
@@ -1326,7 +1597,10 @@ function MemberEditor(props: {
           </select>
         </label>
         <label>
-          <span>Employment Income</span>
+          <FieldLabel
+            label="Employment Income"
+            hint="Current annual employment income before retirement."
+          />
           <input
             type="number"
             value={member.employmentIncome}
@@ -1339,7 +1613,10 @@ function MemberEditor(props: {
           />
         </label>
         <label>
-          <span>CPP / QPP Monthly at Start Age</span>
+          <FieldLabel
+            label="CPP / QPP Monthly at Start Age"
+            hint="Monthly retirement pension estimate at the chosen pension start age."
+          />
           <input
             type="number"
             value={member.cppMonthly}
@@ -1352,7 +1629,10 @@ function MemberEditor(props: {
           />
         </label>
         <label>
-          <span>CPP / QPP Start Age</span>
+          <FieldLabel
+            label="CPP / QPP Start Age"
+            hint="CPP usually starts between 60 and 70. QPP can extend to 72."
+          />
           <input
             type="number"
             value={member.cppStartAge}
@@ -1365,7 +1645,10 @@ function MemberEditor(props: {
           />
         </label>
         <label>
-          <span>OAS Start Age</span>
+          <FieldLabel
+            label="OAS Start Age"
+            hint="OAS can start between 65 and 70."
+          />
           <input
             type="number"
             value={member.oasStartAge}
@@ -1378,7 +1661,10 @@ function MemberEditor(props: {
           />
         </label>
         <label>
-          <span>OAS Residence Years</span>
+          <FieldLabel
+            label="OAS Residence Years"
+            hint="Years lived in Canada after age 18 for OAS entitlement purposes."
+          />
           <input
             type="number"
             value={member.oasResidenceYears}
@@ -1391,7 +1677,10 @@ function MemberEditor(props: {
           />
         </label>
         <label>
-          <span>Annual Rental Income</span>
+          <FieldLabel
+            label="Annual Rental Income"
+            hint="Recurring annual rental income the engine should carry into retirement."
+          />
           <input
             type="number"
             value={member.rentalIncome}
@@ -1404,7 +1693,10 @@ function MemberEditor(props: {
           />
         </label>
         <label>
-          <span>Annual Foreign Pension</span>
+          <FieldLabel
+            label="Annual Foreign Pension"
+            hint="Recurring annual foreign pension income, before deeper treaty detail."
+          />
           <input
             type="number"
             value={member.foreignPensionIncome}
@@ -1474,6 +1766,7 @@ function TrendChart(props: {
     color: string;
     values: number[];
   }>;
+  focusIndex?: number;
 }) {
   const width = 760;
   const height = 220;
@@ -1483,6 +1776,16 @@ function TrendChart(props: {
   const minimumValue = Math.min(0, ...allValues);
   const maximumValue = Math.max(...allValues, 1);
   const range = maximumValue - minimumValue || 1;
+  const clampedFocusIndex =
+    typeof props.focusIndex === "number"
+      ? Math.min(props.focusIndex, Math.max(0, props.labels.length - 1))
+      : undefined;
+  const focusX =
+    clampedFocusIndex === undefined
+      ? null
+      : paddingX +
+        (clampedFocusIndex / Math.max(1, props.labels.length - 1)) *
+          (width - paddingX * 2);
   const zeroLineY =
     minimumValue <= 0 && maximumValue >= 0
       ? height -
@@ -1553,6 +1856,15 @@ function TrendChart(props: {
             className="chart-zero-line"
           />
         ) : null}
+        {focusX !== null ? (
+          <line
+            x1={focusX}
+            y1={paddingY}
+            x2={focusX}
+            y2={height - paddingY}
+            className="chart-focus-line"
+          />
+        ) : null}
         {props.series.map((entry) => (
           <polyline
             key={entry.label}
@@ -1570,6 +1882,26 @@ function TrendChart(props: {
             )}
           />
         ))}
+        {focusX !== null
+          ? props.series.map((entry) => {
+              const focusValue = entry.values[clampedFocusIndex ?? 0] ?? 0;
+              const focusY =
+                height -
+                paddingY -
+                ((focusValue - minimumValue) / range) * (height - paddingY * 2);
+
+              return (
+                <circle
+                  key={`${entry.label}-focus`}
+                  cx={focusX}
+                  cy={focusY}
+                  r="5"
+                  fill={entry.color}
+                  className="chart-focus-point"
+                />
+              );
+            })
+          : null}
       </svg>
 
       <div className="chart-footer">
@@ -1590,6 +1922,19 @@ function Metric(props: { label: string; value: string }) {
       <span>{props.label}</span>
       <strong>{props.value}</strong>
     </article>
+  );
+}
+
+function FieldLabel(props: { label: string; hint?: string }) {
+  return (
+    <span className="label-row">
+      <span>{props.label}</span>
+      {props.hint ? (
+        <span className="help-badge" title={props.hint} aria-label={props.hint}>
+          ?
+        </span>
+      ) : null}
+    </span>
   );
 }
 
@@ -1782,6 +2127,116 @@ function buildChartPoints(
     .join(" ");
 }
 
+function getChartYears(result: SimulationResult, chartRange: ChartRange) {
+  return chartRange === "all"
+    ? result.years
+    : result.years.slice(0, chartRange);
+}
+
+function buildComparisonState(
+  comparisonMode: ComparisonMode,
+  compareSavedScenarioId: string,
+  selectedPreset: UiPreset,
+  savedScenarios: SavedScenarioRecord[],
+): ComparisonState | null {
+  if (comparisonMode === "none") {
+    return null;
+  }
+
+  if (comparisonMode === "preset-baseline") {
+    const baselineScenario = createEditableScenario(selectedPreset);
+    return {
+      label: `${selectedPreset.label} baseline`,
+      runState: buildRunState(selectedPreset, baselineScenario),
+    };
+  }
+
+  const savedScenario = savedScenarios.find(
+    (entry) => entry.id === compareSavedScenarioId,
+  );
+
+  if (!savedScenario) {
+    return null;
+  }
+
+  const savedPreset =
+    uiPresets.find((preset) => preset.id === savedScenario.presetId) ??
+    defaultUiPreset;
+
+  return {
+    label: savedScenario.label,
+    runState: buildRunState(savedPreset, savedScenario.scenario),
+  };
+}
+
+function buildComparisonFacts(
+  currentResult: SimulationResult,
+  comparisonResult: SimulationResult,
+): Array<{ label: string; value: string }> {
+  const currentFirstYear = currentResult.years[0];
+  const comparisonFirstYear = comparisonResult.years[0];
+
+  return [
+    {
+      label: "After-Tax Income Delta",
+      value: formatSignedCurrency(
+        (currentFirstYear?.afterTaxIncome ?? 0) -
+          (comparisonFirstYear?.afterTaxIncome ?? 0),
+      ),
+    },
+    {
+      label: "First-Year Gap Delta",
+      value: formatSignedCurrency(
+        (currentFirstYear?.shortfallOrSurplus ?? 0) -
+          (comparisonFirstYear?.shortfallOrSurplus ?? 0),
+      ),
+    },
+    {
+      label: "After-Tax Estate Delta",
+      value: formatSignedCurrency(
+        (currentResult.summary.estimatedAfterTaxEstateValue ?? 0) -
+          (comparisonResult.summary.estimatedAfterTaxEstateValue ?? 0),
+      ),
+    },
+    {
+      label: "Terminal Tax Delta",
+      value: formatSignedCurrency(
+        (currentResult.summary.estimatedTerminalTaxLiability ?? 0) -
+          (comparisonResult.summary.estimatedTerminalTaxLiability ?? 0),
+      ),
+    },
+    {
+      label: "Readiness",
+      value: `${comparisonResult.summary.initialReadiness} -> ${currentResult.summary.initialReadiness}`,
+    },
+    {
+      label: "First Shortfall",
+      value: `${comparisonResult.summary.firstShortfallYear ?? "None"} -> ${
+        currentResult.summary.firstShortfallYear ?? "None"
+      }`,
+    },
+  ];
+}
+
+function buildFocusedYearFacts(
+  year: ProjectionYear,
+): Array<{ label: string; value: string }> {
+  return [
+    { label: "Year", value: String(year.calendarYear) },
+    {
+      label: "Age",
+      value:
+        year.partnerAge !== undefined
+          ? `${year.primaryAge} / ${year.partnerAge}`
+          : String(year.primaryAge),
+    },
+    { label: "After-Tax Income", value: formatCurrency(year.afterTaxIncome) },
+    { label: "Spending", value: formatCurrency(year.spending) },
+    { label: "Taxes", value: formatCurrency(year.taxes) },
+    { label: "Gap / Surplus", value: formatSignedCurrency(year.shortfallOrSurplus) },
+  ];
+}
+
 function buildReviewFacts(
   scenario: EditableScenario,
   result: SimulationResult,
@@ -1837,6 +2292,35 @@ function buildOutcomeNarrative(
       : "The engine did not surface a major first-pass warning in the current scenario.";
 
   return [readinessLine, gapLine, benefitsLine, warningLine];
+}
+
+function buildComparisonNarrative(
+  currentResult: SimulationResult,
+  comparisonResult: SimulationResult,
+): string[] {
+  const currentFirstYear = currentResult.years[0];
+  const comparisonFirstYear = comparisonResult.years[0];
+  const incomeDelta =
+    (currentFirstYear?.afterTaxIncome ?? 0) -
+    (comparisonFirstYear?.afterTaxIncome ?? 0);
+  const gapDelta =
+    (currentFirstYear?.shortfallOrSurplus ?? 0) -
+    (comparisonFirstYear?.shortfallOrSurplus ?? 0);
+  const estateDelta =
+    (currentResult.summary.estimatedAfterTaxEstateValue ?? 0) -
+    (comparisonResult.summary.estimatedAfterTaxEstateValue ?? 0);
+
+  return [
+    `Compared with the reference scenario, first-year after-tax income is ${formatSignedCurrency(
+      incomeDelta,
+    )}.`,
+    `First-year funding gap changes by ${formatSignedCurrency(
+      gapDelta,
+    )}, which helps show whether the plan is becoming more or less resilient.`,
+    `After-tax estate changes by ${formatSignedCurrency(
+      estateDelta,
+    )} under the current assumptions.`,
+  ];
 }
 
 function totalHouseholdBalance(year: ProjectionYear): number {
@@ -2217,6 +2701,17 @@ function formatPercent(value: number): string {
     style: "percent",
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+function formatSignedCurrency(value: number): string {
+  const absoluteValue = formatCurrency(Math.abs(value));
+  if (value > 0) {
+    return `+${absoluteValue}`;
+  }
+  if (value < 0) {
+    return `-${absoluteValue}`;
+  }
+  return absoluteValue;
 }
 
 function formatCurrency(value: number): string {
