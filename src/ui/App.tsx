@@ -1,6 +1,7 @@
-import { useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { simulateRetirementPlan } from "../index.js";
 import type {
+  BeneficiaryDesignationType,
   HouseholdMemberInput,
   HouseholdType,
   PensionPlanType,
@@ -39,6 +40,40 @@ type EditableMember = {
   rentalIncome: number;
   foreignPensionIncome: number;
   balances: EditableBalances;
+  taxProfile: EditableTaxProfile;
+  beneficiaryDesignations: EditableBeneficiaryDesignations;
+  jointOwnership: EditableJointOwnership;
+};
+
+type EditableTaxProfile = {
+  adjustedCostBase: number;
+  capitalLossCarryforward: number;
+  annualInterestIncome: number;
+  annualEligibleDividendIncome: number;
+  annualNonEligibleDividendIncome: number;
+  annualForeignDividendIncome: number;
+  annualForeignTaxPaid: number;
+  annualReturnOfCapitalDistribution: number;
+};
+
+type EditableBeneficiaryDesignations = {
+  rrsp: BeneficiaryDesignationType;
+  rrif: BeneficiaryDesignationType;
+  tfsa: BeneficiaryDesignationType;
+  lif: BeneficiaryDesignationType;
+};
+
+type EditableJointOwnership = {
+  nonRegisteredJointPercent: number;
+  cashJointPercent: number;
+};
+
+type EditableOneTimeEvent = {
+  id: string;
+  age: number;
+  amount: number;
+  direction: "inflow" | "outflow";
+  description: string;
 };
 
 type EditableScenario = {
@@ -56,6 +91,7 @@ type EditableScenario = {
   gisModelingEnabled: boolean;
   desiredAfterTaxSpending: number;
   survivorSpendingPercent: number;
+  oneTimeEvents: EditableOneTimeEvent[];
   primary: EditableMember;
   partner: EditableMember | null;
 };
@@ -108,6 +144,14 @@ type IntakeStepId = "setup" | "people" | "strategy" | "review";
 const provinceOptions: ProvinceCode[] = ["ON", "BC", "AB", "QC"];
 const householdTypeOptions: HouseholdType[] = ["single", "married", "common-law"];
 const pensionPlanOptions: PensionPlanType[] = ["CPP", "QPP"];
+const beneficiaryDesignationOptions: Array<{
+  value: BeneficiaryDesignationType;
+  label: string;
+}> = [
+  { value: "estate", label: "Estate" },
+  { value: "spouse", label: "Spouse" },
+  { value: "other-beneficiary", label: "Other Beneficiary" },
+];
 const withdrawalOrderOptions: Array<{
   value: WithdrawalOrder;
   label: string;
@@ -147,18 +191,27 @@ const intakeSteps: Array<{
 const canadaRuleSet = canadaRules as CanadaRuleSet;
 const savedScenarioStorageKey =
   "canadian-retirement-calculator.saved-ui-scenarios";
+const autosaveDraftStorageKey =
+  "canadian-retirement-calculator.ui-draft";
 const scenarioTransferVersion = "retirement-ui-scenario-v1";
 const fallbackPartnerTemplate = deepClone(
   defaultUiPreset.input.household.partner ?? defaultUiPreset.input.household.primary,
 );
-const initialScenario = createEditableScenario(defaultUiPreset);
+const initialAutosaveDraft = readAutosaveDraft();
+const initialPreset =
+  uiPresets.find((preset) => preset.id === initialAutosaveDraft?.presetId) ??
+  defaultUiPreset;
+const initialScenario = initialAutosaveDraft
+  ? normalizeImportedScenario(initialAutosaveDraft, initialPreset)
+  : createEditableScenario(defaultUiPreset);
+const initialSelectedPresetId = initialPreset.id;
 
 export function App() {
   const importInputRef = useRef<HTMLInputElement | null>(null);
-  const [selectedPresetId, setSelectedPresetId] = useState(defaultUiPreset.id);
+  const [selectedPresetId, setSelectedPresetId] = useState(initialSelectedPresetId);
   const [scenario, setScenario] = useState<EditableScenario>(initialScenario);
   const [runState, setRunState] = useState<RunState>(() =>
-    buildRunState(defaultUiPreset, initialScenario),
+    buildRunState(initialPreset, initialScenario),
   );
   const [comparisonMode, setComparisonMode] = useState<ComparisonMode>("none");
   const [compareSavedScenarioId, setCompareSavedScenarioId] = useState("");
@@ -172,6 +225,14 @@ export function App() {
   const [reportStatus, setReportStatus] = useState<ReportStatus | null>(null);
   const [chartRange, setChartRange] = useState<ChartRange>(18);
   const [focusedYearIndex, setFocusedYearIndex] = useState(0);
+  const [draftStatus, setDraftStatus] = useState<ReportStatus | null>(
+    initialAutosaveDraft
+      ? {
+          tone: "success",
+          message: "Restored the last autosaved draft from this browser.",
+        }
+      : null,
+  );
 
   const selectedPreset =
     uiPresets.find((preset) => preset.id === selectedPresetId) ?? defaultUiPreset;
@@ -291,6 +352,10 @@ export function App() {
     comparisonState,
   );
 
+  useEffect(() => {
+    writeAutosaveDraft(scenario);
+  }, [scenario]);
+
   const refreshComparisonState = (
     nextSelectedPreset: UiPreset,
     nextSavedScenarios: SavedScenarioRecord[] = savedScenarios,
@@ -314,6 +379,10 @@ export function App() {
     setLastLoadedSavedId(null);
     setTransferStatus(null);
     setReportStatus(null);
+    setDraftStatus({
+      tone: "success",
+      message: "Loaded a fresh preset and made it the active autosaved draft.",
+    });
     setComparisonState(
       buildComparisonState(
         comparisonMode,
@@ -333,6 +402,10 @@ export function App() {
     setLastLoadedSavedId(null);
     setTransferStatus(null);
     setReportStatus(null);
+    setDraftStatus({
+      tone: "success",
+      message: "Reset the working scenario. This version is now the active autosaved draft.",
+    });
     refreshComparisonState(selectedPreset);
   };
 
@@ -352,6 +425,10 @@ export function App() {
     refreshComparisonState(selectedPreset);
     setTransferStatus(null);
     setReportStatus(null);
+    setDraftStatus({
+      tone: "success",
+      message: "Calculated the plan. The current scenario is autosaved in this browser.",
+    });
   };
 
   const handleSaveScenario = () => {
@@ -375,13 +452,17 @@ export function App() {
       tone: "success",
       message: `Saved snapshot "${snapshot.label}".`,
     });
+    setDraftStatus({
+      tone: "success",
+      message: "Current draft remains autosaved in this browser.",
+    });
   };
 
   const handleLoadSavedScenario = (savedScenario: SavedScenarioRecord) => {
     const preset =
       uiPresets.find((candidate) => candidate.id === savedScenario.presetId) ??
       defaultUiPreset;
-    const nextScenario = deepClone(savedScenario.scenario);
+    const nextScenario = normalizeImportedScenario(savedScenario.scenario, preset);
     setSelectedPresetId(preset.id);
     setScenario(nextScenario);
     setRunState(buildRunState(preset, nextScenario));
@@ -392,6 +473,10 @@ export function App() {
       message: `Loaded saved scenario "${savedScenario.label}".`,
     });
     setReportStatus(null);
+    setDraftStatus({
+      tone: "success",
+      message: "Loaded snapshot is now the active autosaved draft.",
+    });
     refreshComparisonState(preset);
     setActiveStep("review");
   };
@@ -447,10 +532,23 @@ export function App() {
       tone: "success",
       message: "Exported current scenario to JSON.",
     });
+    setDraftStatus({
+      tone: "success",
+      message: "Current draft remains autosaved in this browser.",
+    });
   };
 
   const handleImportButtonClick = () => {
     importInputRef.current?.click();
+  };
+
+  const handleClearDraft = () => {
+    clearAutosaveDraft();
+    setDraftStatus({
+      tone: "success",
+      message:
+        "Cleared the browser autosave draft. The next edit will create a fresh draft.",
+    });
   };
 
   const handlePrintReport = () => {
@@ -536,6 +634,10 @@ export function App() {
         message: `Imported scenario "${normalizedScenario.title}".`,
       });
       setReportStatus(null);
+      setDraftStatus({
+        tone: "success",
+        message: "Imported scenario is now the active autosaved draft.",
+      });
       refreshComparisonState(preset);
       setActiveStep("review");
     } catch (error) {
@@ -1025,6 +1127,18 @@ export function App() {
                   </label>
                 </div>
               </section>
+
+              <OneTimeEventsEditor
+                events={scenario.oneTimeEvents}
+                primaryCurrentAge={scenario.primary.age}
+                primaryLifeExpectancy={scenario.primary.lifeExpectancy}
+                onChange={(nextEvents) =>
+                  setScenario((current) => ({
+                    ...current,
+                    oneTimeEvents: nextEvents,
+                  }))
+                }
+              />
             </>
           ) : null}
 
@@ -1058,6 +1172,13 @@ export function App() {
                     >
                       Import JSON
                     </button>
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      onClick={handleClearDraft}
+                    >
+                      Clear Draft
+                    </button>
                     <input
                       ref={importInputRef}
                       className="visually-hidden"
@@ -1080,6 +1201,17 @@ export function App() {
                     }
                   >
                     {transferStatus.message}
+                  </p>
+                ) : null}
+                {draftStatus ? (
+                  <p
+                    className={
+                      draftStatus.tone === "success"
+                        ? "status-banner status-banner-success"
+                        : "status-banner status-banner-error"
+                    }
+                  >
+                    {draftStatus.message}
                   </p>
                 ) : null}
                 {savedScenarioLabel ? (
@@ -1722,6 +1854,42 @@ function MemberEditor(props: {
   onChange: (member: EditableMember) => void;
 }) {
   const { member, onChange } = props;
+  const updateTaxProfile = (
+    key: keyof EditableTaxProfile,
+    value: number,
+  ) => {
+    onChange({
+      ...member,
+      taxProfile: {
+        ...member.taxProfile,
+        [key]: value,
+      },
+    });
+  };
+  const updateBeneficiaryDesignation = (
+    key: keyof EditableBeneficiaryDesignations,
+    value: BeneficiaryDesignationType,
+  ) => {
+    onChange({
+      ...member,
+      beneficiaryDesignations: {
+        ...member.beneficiaryDesignations,
+        [key]: value,
+      },
+    });
+  };
+  const updateJointOwnership = (
+    key: keyof EditableJointOwnership,
+    value: number,
+  ) => {
+    onChange({
+      ...member,
+      jointOwnership: {
+        ...member.jointOwnership,
+        [key]: value,
+      },
+    });
+  };
 
   return (
     <section className="member-card">
@@ -1952,6 +2120,418 @@ function MemberEditor(props: {
           </label>
         ))}
       </div>
+
+      <div className="advanced-settings-grid">
+        <section className="advanced-settings-card">
+          <div className="member-header">
+            <h4>Taxable Account Detail</h4>
+          </div>
+          <p className="section-note">
+            Use this when non-registered balances need ACB, dividend, foreign
+            tax, ROC, or capital-loss detail.
+          </p>
+          <div className="form-section compact-form-section">
+            <label>
+              <FieldLabel
+                label="Non-Reg ACB"
+                hint="Adjusted cost base for the current non-registered balance."
+              />
+              <input
+                type="number"
+                value={member.taxProfile.adjustedCostBase}
+                onChange={(event) =>
+                  updateTaxProfile(
+                    "adjustedCostBase",
+                    readNumber(event.target.value),
+                  )
+                }
+              />
+            </label>
+            <label>
+              <FieldLabel
+                label="Capital Loss Carryforward"
+                hint="Available net capital losses that can offset future taxable gains."
+              />
+              <input
+                type="number"
+                value={member.taxProfile.capitalLossCarryforward}
+                onChange={(event) =>
+                  updateTaxProfile(
+                    "capitalLossCarryforward",
+                    readNumber(event.target.value),
+                  )
+                }
+              />
+            </label>
+            <label>
+              <FieldLabel
+                label="Annual Interest"
+                hint="Recurring annual interest income from taxable accounts."
+              />
+              <input
+                type="number"
+                value={member.taxProfile.annualInterestIncome}
+                onChange={(event) =>
+                  updateTaxProfile(
+                    "annualInterestIncome",
+                    readNumber(event.target.value),
+                  )
+                }
+              />
+            </label>
+            <label>
+              <FieldLabel
+                label="Eligible Dividends"
+                hint="Cash eligible dividends received from Canadian corporations."
+              />
+              <input
+                type="number"
+                value={member.taxProfile.annualEligibleDividendIncome}
+                onChange={(event) =>
+                  updateTaxProfile(
+                    "annualEligibleDividendIncome",
+                    readNumber(event.target.value),
+                  )
+                }
+              />
+            </label>
+            <label>
+              <FieldLabel
+                label="Non-Eligible Dividends"
+                hint="Cash non-eligible dividends for smaller Canadian business distributions."
+              />
+              <input
+                type="number"
+                value={member.taxProfile.annualNonEligibleDividendIncome}
+                onChange={(event) =>
+                  updateTaxProfile(
+                    "annualNonEligibleDividendIncome",
+                    readNumber(event.target.value),
+                  )
+                }
+              />
+            </label>
+            <label>
+              <FieldLabel
+                label="Foreign Dividends"
+                hint="Recurring foreign dividend income before treaty detail."
+              />
+              <input
+                type="number"
+                value={member.taxProfile.annualForeignDividendIncome}
+                onChange={(event) =>
+                  updateTaxProfile(
+                    "annualForeignDividendIncome",
+                    readNumber(event.target.value),
+                  )
+                }
+              />
+            </label>
+            <label>
+              <FieldLabel
+                label="Foreign Tax Paid"
+                hint="Annual foreign non-business tax withheld and paid on taxable foreign income."
+              />
+              <input
+                type="number"
+                value={member.taxProfile.annualForeignTaxPaid}
+                onChange={(event) =>
+                  updateTaxProfile(
+                    "annualForeignTaxPaid",
+                    readNumber(event.target.value),
+                  )
+                }
+              />
+            </label>
+            <label>
+              <FieldLabel
+                label="Return of Capital"
+                hint="Annual return-of-capital cash that should reduce ACB instead of being taxed immediately."
+              />
+              <input
+                type="number"
+                value={member.taxProfile.annualReturnOfCapitalDistribution}
+                onChange={(event) =>
+                  updateTaxProfile(
+                    "annualReturnOfCapitalDistribution",
+                    readNumber(event.target.value),
+                  )
+                }
+              />
+            </label>
+          </div>
+        </section>
+
+        <section className="advanced-settings-card">
+          <div className="member-header">
+            <h4>Estate Routing</h4>
+          </div>
+          <p className="section-note">
+            These settings affect baseline probate, survivor rollover, and
+            death-year tax treatment.
+          </p>
+          <div className="form-section compact-form-section">
+            <label>
+              <FieldLabel
+                label="RRSP Beneficiary"
+                hint="Estate keeps the default. Spouse and other beneficiary can change terminal-tax and estate flow."
+              />
+              <select
+                value={member.beneficiaryDesignations.rrsp}
+                onChange={(event) =>
+                  updateBeneficiaryDesignation(
+                    "rrsp",
+                    event.target.value as BeneficiaryDesignationType,
+                  )
+                }
+              >
+                {beneficiaryDesignationOptions.map((option) => (
+                  <option key={`rrsp-${option.value}`} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <FieldLabel
+                label="RRIF Beneficiary"
+                hint="Use this when RRIF assets are meant for the spouse or another direct beneficiary."
+              />
+              <select
+                value={member.beneficiaryDesignations.rrif}
+                onChange={(event) =>
+                  updateBeneficiaryDesignation(
+                    "rrif",
+                    event.target.value as BeneficiaryDesignationType,
+                  )
+                }
+              >
+                {beneficiaryDesignationOptions.map((option) => (
+                  <option key={`rrif-${option.value}`} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <FieldLabel
+                label="TFSA Successor / Beneficiary"
+                hint="Spouse generally maps to successor-holder style treatment in the current baseline."
+              />
+              <select
+                value={member.beneficiaryDesignations.tfsa}
+                onChange={(event) =>
+                  updateBeneficiaryDesignation(
+                    "tfsa",
+                    event.target.value as BeneficiaryDesignationType,
+                  )
+                }
+              >
+                {beneficiaryDesignationOptions.map((option) => (
+                  <option key={`tfsa-${option.value}`} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <FieldLabel
+                label="LIF / FRV Beneficiary"
+                hint="Used for locked-in income accounts in the death-year baseline."
+              />
+              <select
+                value={member.beneficiaryDesignations.lif}
+                onChange={(event) =>
+                  updateBeneficiaryDesignation(
+                    "lif",
+                    event.target.value as BeneficiaryDesignationType,
+                  )
+                }
+              >
+                {beneficiaryDesignationOptions.map((option) => (
+                  <option key={`lif-${option.value}`} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <FieldLabel
+                label="Non-Reg Joint %"
+                hint="Percent jointly owned with a surviving spouse for probate-exclusion baseline modeling."
+              />
+              <input
+                type="number"
+                value={member.jointOwnership.nonRegisteredJointPercent}
+                onChange={(event) =>
+                  updateJointOwnership(
+                    "nonRegisteredJointPercent",
+                    readNumber(event.target.value),
+                  )
+                }
+              />
+            </label>
+            <label>
+              <FieldLabel
+                label="Cash Joint %"
+                hint="Percent of cash treated as jointly owned with a surviving spouse."
+              />
+              <input
+                type="number"
+                value={member.jointOwnership.cashJointPercent}
+                onChange={(event) =>
+                  updateJointOwnership(
+                    "cashJointPercent",
+                    readNumber(event.target.value),
+                  )
+                }
+              />
+            </label>
+          </div>
+        </section>
+      </div>
+    </section>
+  );
+}
+
+function OneTimeEventsEditor(props: {
+  events: EditableOneTimeEvent[];
+  primaryCurrentAge: number;
+  primaryLifeExpectancy: number;
+  onChange: (events: EditableOneTimeEvent[]) => void;
+}) {
+  const addEvent = () => {
+    props.onChange([
+      ...props.events,
+      createEditableOneTimeEvent({
+        age: Math.min(props.primaryLifeExpectancy, props.primaryCurrentAge + 1),
+        amount: 10000,
+        direction: "outflow",
+        description: "One-time event",
+      }),
+    ]);
+  };
+
+  const updateEvent = (
+    eventId: string,
+    updates: Partial<EditableOneTimeEvent>,
+  ) => {
+    props.onChange(
+      props.events.map((event) =>
+        event.id === eventId ? { ...event, ...updates } : event,
+      ),
+    );
+  };
+
+  const removeEvent = (eventId: string) => {
+    props.onChange(props.events.filter((event) => event.id !== eventId));
+  };
+
+  return (
+    <section className="member-card">
+      <div className="panel-header">
+        <div>
+          <p className="section-kicker">Strategy</p>
+          <h3>One-Time Events</h3>
+        </div>
+        <button className="ghost-button" type="button" onClick={addEvent}>
+          Add Event
+        </button>
+      </div>
+      <p className="section-note">
+        These events run on the primary household member&apos;s age timeline, so
+        they work well for inheritances, home repairs, downsizing proceeds, or
+        large one-off spending.
+      </p>
+      {props.events.length > 0 ? (
+        <div className="event-list">
+          {props.events.map((event) => (
+            <article key={event.id} className="event-card">
+              <div className="event-card-header">
+                <strong>{event.description || "One-time event"}</strong>
+                <button
+                  className="ghost-button ghost-button-danger"
+                  type="button"
+                  onClick={() => removeEvent(event.id)}
+                >
+                  Remove
+                </button>
+              </div>
+              <div className="form-section compact-form-section">
+                <label>
+                  <FieldLabel
+                    label="Primary Age"
+                    hint="Event fires when the primary household member reaches this age."
+                  />
+                  <input
+                    type="number"
+                    value={event.age}
+                    onChange={(valueEvent) =>
+                      updateEvent(event.id, {
+                        age: readNumber(valueEvent.target.value),
+                      })
+                    }
+                  />
+                </label>
+                <label>
+                  <FieldLabel
+                    label="Direction"
+                    hint="Inflows add cash. Outflows model one-time spending."
+                  />
+                  <select
+                    value={event.direction}
+                    onChange={(valueEvent) =>
+                      updateEvent(event.id, {
+                        direction: valueEvent.target.value as
+                          | "inflow"
+                          | "outflow",
+                      })
+                    }
+                  >
+                    <option value="outflow">Outflow</option>
+                    <option value="inflow">Inflow</option>
+                  </select>
+                </label>
+                <label>
+                  <FieldLabel
+                    label="Amount"
+                    hint="Annual cash amount used for that one-time event year."
+                  />
+                  <input
+                    type="number"
+                    value={event.amount}
+                    onChange={(valueEvent) =>
+                      updateEvent(event.id, {
+                        amount: readNumber(valueEvent.target.value),
+                      })
+                    }
+                  />
+                </label>
+                <label className="event-description-field">
+                  <FieldLabel
+                    label="Description"
+                    hint="Used in warnings and review copy so future-you knows what the event represents."
+                  />
+                  <input
+                    type="text"
+                    value={event.description}
+                    onChange={(valueEvent) =>
+                      updateEvent(event.id, {
+                        description: valueEvent.target.value,
+                      })
+                    }
+                  />
+                </label>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="section-note">
+          No one-time events yet. Add them here when the plan needs inheritances,
+          home work, business sale proceeds, or other single-year shocks.
+        </p>
+      )}
     </section>
   );
 }
@@ -2160,6 +2740,9 @@ function createEditableScenario(preset: UiPreset): EditableScenario {
     desiredAfterTaxSpending: household.expenseProfile.desiredAfterTaxSpending,
     survivorSpendingPercent:
       (household.expenseProfile.survivorSpendingPercentOfCouple ?? 0.72) * 100,
+    oneTimeEvents: household.oneTimeEvents.map((event) =>
+      createEditableOneTimeEvent(event),
+    ),
     primary: createEditableMember(household.primary),
     partner: household.partner ? createEditableMember(household.partner) : null,
   };
@@ -2192,6 +2775,9 @@ function createEditableMember(member: HouseholdMemberInput): EditableMember {
       cash: member.accounts.cash ?? 0,
       lif: member.accounts.lif ?? 0,
     },
+    taxProfile: createEditableTaxProfile(member),
+    beneficiaryDesignations: createEditableBeneficiaryDesignations(member),
+    jointOwnership: createEditableJointOwnership(member),
   };
 }
 
@@ -2245,6 +2831,14 @@ function buildInputFromScenario(
     scenario.householdType === "single"
       ? undefined
       : clampPercent(scenario.survivorSpendingPercent);
+  nextInput.household.oneTimeEvents = scenario.oneTimeEvents
+    .map((event) => ({
+      age: event.age,
+      amount: event.amount,
+      direction: event.direction,
+      description: event.description.trim(),
+    }))
+    .sort((left, right) => left.age - right.age);
 
   applyMemberScenario(nextInput.household.primary, scenario.primary, scenario.province);
 
@@ -2281,6 +2875,11 @@ function applyMemberScenario(
   member.publicBenefits.oasEligible = editable.oasEligible;
   member.publicBenefits.oasResidenceYearsOverride = editable.oasResidenceYears;
   applyBalances(member, editable.balances);
+  member.taxableAccountTaxProfile = buildTaxProfileInput(editable.taxProfile);
+  member.beneficiaryDesignations = buildBeneficiaryDesignationsInput(
+    editable.beneficiaryDesignations,
+  );
+  member.jointOwnershipProfile = buildJointOwnershipInput(editable.jointOwnership);
   member.rentalIncome = createRecurringIncome(
     editable.rentalIncome,
     editable.age,
@@ -2319,6 +2918,142 @@ function createRecurringIncome(
       description,
     },
   ];
+}
+
+function createEditableTaxProfile(member: HouseholdMemberInput): EditableTaxProfile {
+  return {
+    adjustedCostBase:
+      member.taxableAccountTaxProfile?.nonRegisteredAdjustedCostBase ?? 0,
+    capitalLossCarryforward:
+      member.taxableAccountTaxProfile?.initialNetCapitalLossCarryforward ?? 0,
+    annualInterestIncome:
+      member.taxableAccountTaxProfile?.annualInterestIncome ?? 0,
+    annualEligibleDividendIncome:
+      member.taxableAccountTaxProfile?.annualEligibleDividendIncome ?? 0,
+    annualNonEligibleDividendIncome:
+      member.taxableAccountTaxProfile?.annualNonEligibleDividendIncome ?? 0,
+    annualForeignDividendIncome:
+      member.taxableAccountTaxProfile?.annualForeignDividendIncome ?? 0,
+    annualForeignTaxPaid:
+      member.taxableAccountTaxProfile?.annualForeignNonBusinessIncomeTaxPaid ?? 0,
+    annualReturnOfCapitalDistribution:
+      member.taxableAccountTaxProfile?.annualReturnOfCapitalDistribution ?? 0,
+  };
+}
+
+function createEditableBeneficiaryDesignations(
+  member: HouseholdMemberInput,
+): EditableBeneficiaryDesignations {
+  return {
+    rrsp: member.beneficiaryDesignations?.rrsp ?? "estate",
+    rrif: member.beneficiaryDesignations?.rrif ?? "estate",
+    tfsa: member.beneficiaryDesignations?.tfsa ?? "estate",
+    lif: member.beneficiaryDesignations?.lif ?? "estate",
+  };
+}
+
+function createEditableJointOwnership(
+  member: HouseholdMemberInput,
+): EditableJointOwnership {
+  return {
+    nonRegisteredJointPercent:
+      (member.jointOwnershipProfile?.nonRegisteredJointWithSurvivingSpousePercent ??
+        0) * 100,
+    cashJointPercent:
+      (member.jointOwnershipProfile?.cashJointWithSurvivingSpousePercent ?? 0) *
+      100,
+  };
+}
+
+function createEditableOneTimeEvent(
+  event: Omit<EditableOneTimeEvent, "id">,
+): EditableOneTimeEvent {
+  return {
+    ...event,
+    id: `event-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  };
+}
+
+function buildTaxProfileInput(editable: EditableTaxProfile) {
+  const nextProfile: NonNullable<
+    HouseholdMemberInput["taxableAccountTaxProfile"]
+  > = {};
+
+  if (editable.adjustedCostBase > 0) {
+    nextProfile.nonRegisteredAdjustedCostBase = editable.adjustedCostBase;
+  }
+  if (editable.capitalLossCarryforward > 0) {
+    nextProfile.initialNetCapitalLossCarryforward =
+      editable.capitalLossCarryforward;
+  }
+  if (editable.annualInterestIncome > 0) {
+    nextProfile.annualInterestIncome = editable.annualInterestIncome;
+  }
+  if (editable.annualEligibleDividendIncome > 0) {
+    nextProfile.annualEligibleDividendIncome =
+      editable.annualEligibleDividendIncome;
+  }
+  if (editable.annualNonEligibleDividendIncome > 0) {
+    nextProfile.annualNonEligibleDividendIncome =
+      editable.annualNonEligibleDividendIncome;
+  }
+  if (editable.annualForeignDividendIncome > 0) {
+    nextProfile.annualForeignDividendIncome =
+      editable.annualForeignDividendIncome;
+  }
+  if (editable.annualForeignTaxPaid > 0) {
+    nextProfile.annualForeignNonBusinessIncomeTaxPaid =
+      editable.annualForeignTaxPaid;
+  }
+  if (editable.annualReturnOfCapitalDistribution > 0) {
+    nextProfile.annualReturnOfCapitalDistribution =
+      editable.annualReturnOfCapitalDistribution;
+  }
+
+  return Object.keys(nextProfile).length > 0 ? nextProfile : undefined;
+}
+
+function buildBeneficiaryDesignationsInput(
+  editable: EditableBeneficiaryDesignations,
+) {
+  const nextDesignations: NonNullable<
+    HouseholdMemberInput["beneficiaryDesignations"]
+  > = {};
+
+  if (editable.rrsp !== "estate") {
+    nextDesignations.rrsp = editable.rrsp;
+  }
+  if (editable.rrif !== "estate") {
+    nextDesignations.rrif = editable.rrif;
+  }
+  if (editable.tfsa !== "estate") {
+    nextDesignations.tfsa = editable.tfsa;
+  }
+  if (editable.lif !== "estate") {
+    nextDesignations.lif = editable.lif;
+  }
+
+  return Object.keys(nextDesignations).length > 0 ? nextDesignations : undefined;
+}
+
+function buildJointOwnershipInput(editable: EditableJointOwnership) {
+  const nextJointOwnership: NonNullable<
+    HouseholdMemberInput["jointOwnershipProfile"]
+  > = {};
+
+  if (editable.nonRegisteredJointPercent > 0) {
+    nextJointOwnership.nonRegisteredJointWithSurvivingSpousePercent =
+      clampPercent(editable.nonRegisteredJointPercent);
+  }
+  if (editable.cashJointPercent > 0) {
+    nextJointOwnership.cashJointWithSurvivingSpousePercent = clampPercent(
+      editable.cashJointPercent,
+    );
+  }
+
+  return Object.keys(nextJointOwnership).length > 0
+    ? nextJointOwnership
+    : undefined;
 }
 
 function buildChartPoints(
@@ -2473,6 +3208,10 @@ function buildReviewFacts(
     {
       label: "Target Spending",
       value: formatCurrency(scenario.desiredAfterTaxSpending),
+    },
+    {
+      label: "One-Time Events",
+      value: String(scenario.oneTimeEvents.length),
     },
     {
       label: "Projection End",
@@ -2737,10 +3476,54 @@ function validateScenario(
     });
   }
 
-  issues.push(...validateMember("Primary", scenario.primary, scenario.province));
+  for (const event of scenario.oneTimeEvents) {
+    if (event.age < scenario.primary.age) {
+      issues.push({
+        level: "error",
+        message: `One-time event "${event.description || "Untitled event"}" is set before the current primary age.`,
+      });
+    }
+
+    if (event.amount <= 0) {
+      issues.push({
+        level: "error",
+        message: `One-time event "${event.description || "Untitled event"}" needs an amount greater than zero.`,
+      });
+    }
+
+    if (!event.description.trim()) {
+      issues.push({
+        level: "error",
+        message: "Each one-time event needs a short description.",
+      });
+    }
+
+    if (event.age > scenario.primary.lifeExpectancy) {
+      issues.push({
+        level: "warning",
+        message: `One-time event "${event.description || "Untitled event"}" is beyond the primary life expectancy and may never be reached in the run.`,
+      });
+    }
+  }
+
+  issues.push(
+    ...validateMember(
+      "Primary",
+      scenario.primary,
+      scenario.province,
+      scenario.householdType,
+    ),
+  );
 
   if (partnerScenario) {
-    issues.push(...validateMember("Partner", partnerScenario, scenario.province));
+    issues.push(
+      ...validateMember(
+        "Partner",
+        partnerScenario,
+        scenario.province,
+        scenario.householdType,
+      ),
+    );
   }
 
   return issues;
@@ -2750,6 +3533,7 @@ function validateMember(
   label: string,
   member: EditableMember,
   province: ProvinceCode,
+  householdType: HouseholdType,
 ): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   const pensionStartMax = member.pensionPlan === "QPP" ? 72 : 70;
@@ -2837,6 +3621,94 @@ function validateMember(
     issues.push({
       level: "error",
       message: `${label} recurring outside income entries cannot be negative.`,
+    });
+  }
+
+  for (const [fieldLabel, value] of [
+    ["adjusted cost base", member.taxProfile.adjustedCostBase],
+    ["capital loss carryforward", member.taxProfile.capitalLossCarryforward],
+    ["annual interest income", member.taxProfile.annualInterestIncome],
+    [
+      "annual eligible dividend income",
+      member.taxProfile.annualEligibleDividendIncome,
+    ],
+    [
+      "annual non-eligible dividend income",
+      member.taxProfile.annualNonEligibleDividendIncome,
+    ],
+    [
+      "annual foreign dividend income",
+      member.taxProfile.annualForeignDividendIncome,
+    ],
+    ["annual foreign tax paid", member.taxProfile.annualForeignTaxPaid],
+    [
+      "annual return of capital",
+      member.taxProfile.annualReturnOfCapitalDistribution,
+    ],
+  ] as const) {
+    if (value < 0) {
+      issues.push({
+        level: "error",
+        message: `${label} ${fieldLabel} cannot be negative.`,
+      });
+    }
+  }
+
+  if (member.taxProfile.adjustedCostBase > 0 && member.balances.nonRegistered <= 0) {
+    issues.push({
+      level: "warning",
+      message: `${label} has a non-registered ACB entered but no non-registered balance.`,
+    });
+  }
+
+  if (
+    member.taxProfile.annualForeignTaxPaid > 0 &&
+    member.taxProfile.annualForeignDividendIncome <= 0 &&
+    member.foreignPensionIncome <= 0
+  ) {
+    issues.push({
+      level: "warning",
+      message: `${label} has foreign tax paid entered without foreign dividend or foreign pension income.`,
+    });
+  }
+
+  if (
+    member.jointOwnership.nonRegisteredJointPercent < 0 ||
+    member.jointOwnership.nonRegisteredJointPercent > 100
+  ) {
+    issues.push({
+      level: "error",
+      message: `${label} non-registered joint ownership percent must stay between 0% and 100%.`,
+    });
+  }
+
+  if (member.jointOwnership.cashJointPercent < 0 || member.jointOwnership.cashJointPercent > 100) {
+    issues.push({
+      level: "error",
+      message: `${label} cash joint ownership percent must stay between 0% and 100%.`,
+    });
+  }
+
+  if (
+    householdType === "single" &&
+    (member.jointOwnership.nonRegisteredJointPercent > 0 ||
+      member.jointOwnership.cashJointPercent > 0)
+  ) {
+    issues.push({
+      level: "warning",
+      message: `${label} has joint-with-spouse ownership entered, but the household is currently modeled as single.`,
+    });
+  }
+
+  if (
+    householdType === "single" &&
+    Object.values(member.beneficiaryDesignations).some(
+      (designation) => designation === "spouse",
+    )
+  ) {
+    issues.push({
+      level: "warning",
+      message: `${label} has spouse beneficiary routing selected, but the household is currently modeled as single.`,
     });
   }
 
@@ -2952,11 +3824,15 @@ function normalizeImportedScenario(
       scenario.survivorSpendingPercent,
       fallback.survivorSpendingPercent,
     ),
+    oneTimeEvents: normalizeImportedOneTimeEvents(
+      scenario.oneTimeEvents,
+      fallback.oneTimeEvents,
+    ),
     primary: normalizeImportedMember(scenario.primary, fallback.primary),
     partner:
-      nextHouseholdType === "single"
-        ? null
-        : normalizeImportedMember(scenario.partner ?? fallbackPartner, fallbackPartner),
+      scenario.partner || nextHouseholdType !== "single"
+        ? normalizeImportedMember(scenario.partner ?? fallbackPartner, fallbackPartner)
+        : null,
   };
 }
 
@@ -3002,7 +3878,97 @@ function normalizeImportedMember(
       cash: safeNumber(member?.balances?.cash, fallback.balances.cash),
       lif: safeNumber(member?.balances?.lif, fallback.balances.lif),
     },
+    taxProfile: {
+      adjustedCostBase: safeNumber(
+        member?.taxProfile?.adjustedCostBase,
+        fallback.taxProfile.adjustedCostBase,
+      ),
+      capitalLossCarryforward: safeNumber(
+        member?.taxProfile?.capitalLossCarryforward,
+        fallback.taxProfile.capitalLossCarryforward,
+      ),
+      annualInterestIncome: safeNumber(
+        member?.taxProfile?.annualInterestIncome,
+        fallback.taxProfile.annualInterestIncome,
+      ),
+      annualEligibleDividendIncome: safeNumber(
+        member?.taxProfile?.annualEligibleDividendIncome,
+        fallback.taxProfile.annualEligibleDividendIncome,
+      ),
+      annualNonEligibleDividendIncome: safeNumber(
+        member?.taxProfile?.annualNonEligibleDividendIncome,
+        fallback.taxProfile.annualNonEligibleDividendIncome,
+      ),
+      annualForeignDividendIncome: safeNumber(
+        member?.taxProfile?.annualForeignDividendIncome,
+        fallback.taxProfile.annualForeignDividendIncome,
+      ),
+      annualForeignTaxPaid: safeNumber(
+        member?.taxProfile?.annualForeignTaxPaid,
+        fallback.taxProfile.annualForeignTaxPaid,
+      ),
+      annualReturnOfCapitalDistribution: safeNumber(
+        member?.taxProfile?.annualReturnOfCapitalDistribution,
+        fallback.taxProfile.annualReturnOfCapitalDistribution,
+      ),
+    },
+    beneficiaryDesignations: {
+      rrsp: beneficiaryDesignationOptions.some(
+        (option) => option.value === member?.beneficiaryDesignations?.rrsp,
+      )
+        ? member?.beneficiaryDesignations?.rrsp ?? fallback.beneficiaryDesignations.rrsp
+        : fallback.beneficiaryDesignations.rrsp,
+      rrif: beneficiaryDesignationOptions.some(
+        (option) => option.value === member?.beneficiaryDesignations?.rrif,
+      )
+        ? member?.beneficiaryDesignations?.rrif ?? fallback.beneficiaryDesignations.rrif
+        : fallback.beneficiaryDesignations.rrif,
+      tfsa: beneficiaryDesignationOptions.some(
+        (option) => option.value === member?.beneficiaryDesignations?.tfsa,
+      )
+        ? member?.beneficiaryDesignations?.tfsa ?? fallback.beneficiaryDesignations.tfsa
+        : fallback.beneficiaryDesignations.tfsa,
+      lif: beneficiaryDesignationOptions.some(
+        (option) => option.value === member?.beneficiaryDesignations?.lif,
+      )
+        ? member?.beneficiaryDesignations?.lif ?? fallback.beneficiaryDesignations.lif
+        : fallback.beneficiaryDesignations.lif,
+    },
+    jointOwnership: {
+      nonRegisteredJointPercent: safeNumber(
+        member?.jointOwnership?.nonRegisteredJointPercent,
+        fallback.jointOwnership.nonRegisteredJointPercent,
+      ),
+      cashJointPercent: safeNumber(
+        member?.jointOwnership?.cashJointPercent,
+        fallback.jointOwnership.cashJointPercent,
+      ),
+    },
   };
+}
+
+function normalizeImportedOneTimeEvents(
+  events: EditableOneTimeEvent[] | undefined,
+  fallbackEvents: EditableOneTimeEvent[],
+): EditableOneTimeEvent[] {
+  if (!Array.isArray(events)) {
+    return fallbackEvents.map((event) => createEditableOneTimeEvent(event));
+  }
+
+  return events.map((event, index) =>
+    createEditableOneTimeEvent({
+      age: safeNumber(event?.age, fallbackEvents[index]?.age ?? 65),
+      amount: safeNumber(event?.amount, fallbackEvents[index]?.amount ?? 10000),
+      direction:
+        event?.direction === "inflow" || event?.direction === "outflow"
+          ? event.direction
+          : fallbackEvents[index]?.direction ?? "outflow",
+      description:
+        typeof event?.description === "string"
+          ? event.description
+          : fallbackEvents[index]?.description ?? "One-time event",
+    }),
+  );
 }
 
 function readSavedScenarios(): SavedScenarioRecord[] {
@@ -3016,8 +3982,41 @@ function readSavedScenarios(): SavedScenarioRecord[] {
   }
 
   try {
-    const parsed = JSON.parse(raw) as SavedScenarioRecord[];
-    return Array.isArray(parsed) ? parsed : [];
+    const parsed = JSON.parse(raw) as Partial<SavedScenarioRecord>[];
+
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed
+      .filter((entry): entry is Partial<SavedScenarioRecord> => Boolean(entry))
+      .map((entry) => {
+        const preset =
+          uiPresets.find((candidate) => candidate.id === entry.presetId) ??
+          defaultUiPreset;
+        const normalizedScenario = normalizeImportedScenario(
+          (entry.scenario as EditableScenario | undefined) ??
+            createEditableScenario(preset),
+          preset,
+        );
+
+        return {
+          id:
+            typeof entry.id === "string" && entry.id.trim()
+              ? entry.id
+              : createScenarioSnapshotId(),
+          label:
+            typeof entry.label === "string" && entry.label.trim()
+              ? entry.label
+              : normalizedScenario.title,
+          presetId: preset.id,
+          savedAt:
+            typeof entry.savedAt === "string" && entry.savedAt.trim()
+              ? entry.savedAt
+              : new Date().toISOString(),
+          scenario: normalizedScenario,
+        };
+      });
   } catch {
     return [];
   }
@@ -3032,6 +4031,43 @@ function writeSavedScenarios(savedScenarios: SavedScenarioRecord[]) {
     savedScenarioStorageKey,
     JSON.stringify(savedScenarios),
   );
+}
+
+function readAutosaveDraft(): EditableScenario | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const raw = window.localStorage.getItem(autosaveDraftStorageKey);
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as EditableScenario;
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeAutosaveDraft(scenario: EditableScenario) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(
+    autosaveDraftStorageKey,
+    JSON.stringify(deepClone(scenario)),
+  );
+}
+
+function clearAutosaveDraft() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.removeItem(autosaveDraftStorageKey);
 }
 
 function createScenarioSnapshotId() {
