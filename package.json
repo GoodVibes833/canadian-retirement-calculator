@@ -4,11 +4,24 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "dev": "vite",
     "build": "tsc --noEmit false --outDir .build",
+    "build:ui": "vite build",
     "smoke:golden": "npm run build && node scripts/runGoldenSmokeTests.mjs",
-    "typecheck": "tsc --noEmit"
+    "preview": "vite preview",
+    "typecheck": "npm run typecheck:engine && npm run typecheck:ui",
+    "typecheck:engine": "tsc --noEmit",
+    "typecheck:ui": "tsc --project tsconfig.ui.json --noEmit"
+  },
+  "dependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
   },
   "devDependencies": {
-    "typescript": "^5.8.0"
+    "@types/react": "^19.1.4",
+    "@types/react-dom": "^19.1.2",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "^5.8.0",
+    "vite": "^7.0.0"
   }
 }
