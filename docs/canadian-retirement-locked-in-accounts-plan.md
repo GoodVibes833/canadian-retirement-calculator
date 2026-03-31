@@ -124,7 +124,7 @@ Rationale:
 3. Implement `LIRA -> LIF` conversion.
 4. Implement `ON / BC / AB` minimum / maximum withdrawal caps.
 5. Add `50% unlocking` input support.
-6. Add Quebec FRV dedicated modeling.
+6. Deepen Quebec FRV modeling, especially younger-case temporary-income logic.
 
 ## 8. Current Recommendation
 
@@ -134,7 +134,7 @@ Current engine status:
 
 - baseline `LIRA -> LIF` conversion now exists,
 - baseline `ON / BC / AB` minimum / maximum guardrails now exist,
-- Quebec `FRV` remains warning-heavy partial support,
+- Quebec `FRV` now recognizes the 2025+ no-maximum rule for ages 55 and older, while younger temporary-income logic remains partial,
 - manual annual min / max overrides are still preferred when available.
 
 Medium-term:

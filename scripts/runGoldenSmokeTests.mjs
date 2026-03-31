@@ -363,7 +363,7 @@ const taxChecks = [
   },
   {
     id: "T09",
-    label: "Quebec FRV stays on warning-heavy partial support",
+    label: "Quebec FRV age-55-plus path recognizes no statutory annual maximum",
     check() {
       const input = readJson("data/fixtures/locked-in/qc-frv-warning.json");
       const result = simulateRetirementPlan(input, rules);
@@ -371,13 +371,13 @@ const taxChecks = [
 
       assert(
         firstYear.warnings.some((warning) =>
-          warning.includes("Quebec FRV maximum withdrawal"),
+          warning.includes("no statutory annual maximum"),
         ),
-        "Quebec FRV scenario should surface the partial-support maximum warning.",
+        "Quebec FRV scenario should surface the 2025+ no-maximum warning for ages 55 and older.",
       );
       assert(
-        firstYear.lifWithdrawals > 0,
-        "Quebec FRV scenario should still allow baseline minimum-style withdrawals.",
+        firstYear.lifWithdrawals > 7000,
+        "Quebec FRV scenario should allow withdrawals materially above the RRIF-style minimum when the spending need requires it.",
       );
     },
   },

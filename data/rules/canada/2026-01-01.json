@@ -265,9 +265,11 @@
         "preIncomeAccountLabel": "CRI",
         "incomeAccountLabel": "FRV",
         "usesRrifMinimumRule": true,
+        "noMaximumWithdrawalAge": 55,
         "notes": [
-          "Quebec FRV rules are materially different and temporary-income rules are not yet modeled.",
-          "Manual annual minimum and maximum overrides should be preferred for Quebec."
+          "Since January 1, 2025, Quebec FRV withdrawals have no statutory annual maximum for people age 55 or older at the time of withdrawal.",
+          "Quebec FRV rules remain materially different and temporary-income rules for younger cases are not yet modeled.",
+          "Manual annual overrides should still be allowed for Quebec."
         ]
       }
     }

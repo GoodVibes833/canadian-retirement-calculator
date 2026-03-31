@@ -857,10 +857,20 @@ function buildLockedInAnnualLimits(
       );
 
     if (policy?.jurisdiction === "QC" && policy.manualMaximumAnnualWithdrawal === undefined) {
-      maximumWithdrawal = minimumWithdrawal;
-      warnings.push(
-        "Quebec FRV maximum withdrawal is not fully modeled. Manual annual maximum input is strongly recommended.",
-      );
+      if (
+        jurisdictionRule?.noMaximumWithdrawalAge !== undefined &&
+        frame.age >= jurisdictionRule.noMaximumWithdrawalAge
+      ) {
+        maximumWithdrawal = account.lif;
+        warnings.push(
+          "Quebec FRV withdrawals are being modeled under the 2025+ rule set with no statutory annual maximum at age 55 or older. Temporary-income and institution-specific processing are still not separately modeled.",
+        );
+      } else {
+        maximumWithdrawal = minimumWithdrawal;
+        warnings.push(
+          "Quebec FRV under-age-55 maximum withdrawal is not fully modeled. Manual annual maximum input is strongly recommended for younger Quebec cases.",
+        );
+      }
     }
 
     if (maximumWithdrawal < minimumWithdrawal) {

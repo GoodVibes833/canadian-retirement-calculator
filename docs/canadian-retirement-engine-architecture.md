@@ -159,7 +159,7 @@ The initial scaffold in `src/engine/simulateRetirementPlan.ts` intentionally doe
 The scaffold is intentionally incomplete in these areas:
 
 - taxes now use a 2026 federal and province-aware scaffold for ON, BC, AB, and QC, including basic personal, age, and pension-income credits for federal / ON / BC / AB and a Quebec path that now includes dividend handling, residual foreign tax credits, a baseline career-extension credit, and a household-level Schedule B age and retirement-income approximation,
-- RRIF minimum withdrawals are modeled, and locked-in accounts now support baseline LIRA-to-LIF conversion plus ON / BC / AB fallback LIF guardrails with Quebec warning-heavy partial support,
+- RRIF minimum withdrawals are modeled, and locked-in accounts now support baseline LIRA-to-LIF conversion plus ON / BC / AB fallback LIF guardrails and a Quebec FRV path that recognizes the 2025+ no-maximum rule for ages 55 and older, while younger Quebec temporary-income detail remains partial,
 - non-registered withdrawals now track adjusted cost base and realize taxable capital gains using the ruleset inclusion rate, while explicit taxable-account interest, foreign dividends, Canadian eligible / non-eligible dividends, and return-of-capital cash distributions can be modeled annually; return-of-capital distributions also reduce modeled non-registered market value, and baseline federal plus ON / BC / AB / QC provincial residual-credit foreign-tax-credit approximations are now supported alongside same-year and carryforward net-capital-loss handling, while fuller Quebec form-level and multi-country foreign tax credit detail remain incomplete,
 - GIS is not calculated,
 - pension splitting now uses an annual heuristic on planned eligible pension income before discretionary drawdown, not a full lifetime optimization,
@@ -172,7 +172,7 @@ The scaffold is intentionally incomplete in these areas:
 Recommended order from here:
 
 1. Replace locked-in fallback maximums with more exact institution-style annual calculations and fuller Alberta / BC formulas.
-2. Deepen Quebec-specific FRV and tax-path behavior, including more exact early-start QPP reduction handling, living-alone and richer Schedule B detail, and fuller Quebec form-level foreign tax credit detail.
+2. Deepen Quebec-specific FRV and tax-path behavior, including younger-case temporary-income logic, more exact early-start QPP reduction handling, living-alone and richer Schedule B detail, and fuller Quebec form-level foreign tax credit detail.
 3. Add GIS and Allowance.
 4. Add fuller survivor modeling including CPP survivor pension and death-year tax handling.
 5. Add more exact multi-country and treaty-aware foreign tax credit handling.
