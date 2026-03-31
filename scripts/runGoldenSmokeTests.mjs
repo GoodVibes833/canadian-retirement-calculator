@@ -711,6 +711,39 @@ const taxChecks = [
       );
     },
   },
+  {
+    id: "T19",
+    label: "Capital losses carry forward and offset later taxable capital gains",
+    check() {
+      const input = readJson(
+        "data/fixtures/taxable-account/on-taxable-loss-carryforward.json",
+      );
+      const result = simulateRetirementPlan(input, rules);
+      const firstYear = result.years[0];
+      const secondYear = result.years[1];
+
+      assert(
+        firstYear.netCapitalLossCarryforward > 0,
+        "A capital loss in the first year should create a net capital loss carryforward.",
+      );
+      assert(
+        secondYear.capitalLossesUsed > 0,
+        "Later-year taxable capital gains should use the available capital loss carryforward.",
+      );
+      assert(
+        secondYear.realizedCapitalGains > 0,
+        "The rebound year should still realize a capital gain on withdrawal.",
+      );
+      assert(
+        secondYear.taxableCapitalGains === 0,
+        "Carryforward losses should offset the later taxable capital gain in the modeled rebound year.",
+      );
+      assert(
+        secondYear.netCapitalLossCarryforward < firstYear.netCapitalLossCarryforward,
+        "Using the capital loss carryforward should reduce the remaining carryforward balance.",
+      );
+    },
+  },
 ];
 
 for (const check of taxChecks) {

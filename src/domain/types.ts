@@ -93,6 +93,7 @@ export interface LockedInAccountPolicy {
 
 export interface TaxableAccountTaxProfile {
   nonRegisteredAdjustedCostBase?: number;
+  initialNetCapitalLossCarryforward?: number;
   annualInterestIncome?: number;
   annualEligibleDividendIncome?: number;
   annualNonEligibleDividendIncome?: number;

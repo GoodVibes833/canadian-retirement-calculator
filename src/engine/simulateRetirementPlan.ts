@@ -50,6 +50,15 @@ interface HouseholdLedger {
   partner?: AccountLedger;
 }
 
+interface TaxAttributeLedger {
+  netCapitalLossCarryforward: number;
+}
+
+interface HouseholdTaxAttributeLedger {
+  primary: TaxAttributeLedger;
+  partner?: TaxAttributeLedger;
+}
+
 interface MemberFrame {
   slot: MemberSlot;
   member: HouseholdMemberInput;
@@ -79,6 +88,12 @@ interface MemberFrame {
 }
 
 interface MemberTaxState {
+  ordinaryTaxableIncome: number;
+  grossTaxableCapitalGains: number;
+  allowableCapitalLossesCurrentYear: number;
+  openingNetCapitalLossCarryforward: number;
+  netCapitalLossCarryforwardUsed: number;
+  closingNetCapitalLossCarryforward: number;
   taxableIncome: number;
   taxes: number;
   oasRecoveryTax: number;
@@ -120,6 +135,7 @@ interface DrawdownResult {
 interface SingleYearProjection {
   output: ProjectionYear;
   nextBalances: HouseholdLedger;
+  nextTaxAttributes: HouseholdTaxAttributeLedger;
 }
 
 interface MandatoryMinimumWithdrawalResult {
@@ -151,7 +167,7 @@ interface TaxableWithdrawalBreakdown {
   costBaseReduction: number;
   realizedCapitalGain: number;
   taxableCapitalGain: number;
-  ignoredCapitalLoss: boolean;
+  allowableCapitalLoss: number;
 }
 
 export function simulateRetirementPlan(
@@ -161,12 +177,19 @@ export function simulateRetirementPlan(
   const context = normalizeContext(input, rules);
   const timeline = buildAnnualTimeline(context);
   let balances = initializeHouseholdLedger(context.input);
+  let taxAttributes = initializeHouseholdTaxAttributeLedger(context.input);
   const years: ProjectionYear[] = [];
 
   for (const period of timeline) {
-    const projectedYear = projectSingleYear(context, period, balances);
+    const projectedYear = projectSingleYear(
+      context,
+      period,
+      balances,
+      taxAttributes,
+    );
     years.push(projectedYear.output);
     balances = projectedYear.nextBalances;
+    taxAttributes = projectedYear.nextTaxAttributes;
   }
 
   const summary = summarizeProjection(years, balances);
@@ -270,8 +293,10 @@ function projectSingleYear(
   context: NormalizedContext,
   period: PeriodState,
   openingBalances: HouseholdLedger,
+  openingTaxAttributes: HouseholdTaxAttributeLedger,
 ): SingleYearProjection {
   const balances = cloneHouseholdLedger(openingBalances);
+  const taxAttributes = cloneHouseholdTaxAttributeLedger(openingTaxAttributes);
   const warnings: string[] = [];
   const memberFrames = buildMemberFrames(context, period);
   applySurvivorAdjustments(memberFrames, balances, warnings);
@@ -301,6 +326,7 @@ function projectSingleYear(
     period,
     memberFrames,
     mandatoryMinimumWithdrawals,
+    taxAttributes,
   );
 
   warnings.push(...collectTaxWarnings(memberTaxState));
@@ -416,6 +442,18 @@ function projectSingleYear(
       taxableCapitalGains: roundCurrency(
         sumMemberTaxState(memberTaxState, (state) => state.taxableCapitalGains),
       ),
+      capitalLossesUsed: roundCurrency(
+        sumMemberTaxState(
+          memberTaxState,
+          (state) => state.netCapitalLossCarryforwardUsed,
+        ),
+      ),
+      netCapitalLossCarryforward: roundCurrency(
+        sumMemberTaxState(
+          memberTaxState,
+          (state) => state.closingNetCapitalLossCarryforward,
+        ),
+      ),
       cashWithdrawals: roundCurrency(drawdown.cashWithdrawals),
       endOfYearAccountBalances: {
         primary: roundAccountRecord(balances.primary),
@@ -425,6 +463,10 @@ function projectSingleYear(
       warnings: yearWarnings,
     },
     nextBalances: balances,
+    nextTaxAttributes: buildNextHouseholdTaxAttributeLedger(
+      memberTaxState,
+      openingTaxAttributes,
+    ),
   };
 }
 
@@ -432,6 +474,25 @@ function initializeHouseholdLedger(input: SimulationInput): HouseholdLedger {
   return {
     primary: toAccountLedger(input.household.primary),
     partner: input.household.partner ? toAccountLedger(input.household.partner) : undefined,
+  };
+}
+
+function initializeHouseholdTaxAttributeLedger(
+  input: SimulationInput,
+): HouseholdTaxAttributeLedger {
+  return {
+    primary: {
+      netCapitalLossCarryforward:
+        input.household.primary.taxableAccountTaxProfile
+          ?.initialNetCapitalLossCarryforward ?? 0,
+    },
+    partner: input.household.partner
+      ? {
+          netCapitalLossCarryforward:
+            input.household.partner.taxableAccountTaxProfile
+              ?.initialNetCapitalLossCarryforward ?? 0,
+        }
+      : undefined,
   };
 }
 
@@ -847,13 +908,14 @@ function buildBaseTaxState(
   period: PeriodState,
   memberFrames: MemberFrame[],
   mandatoryMinimumWithdrawals: MandatoryMinimumWithdrawalResult,
+  taxAttributes: HouseholdTaxAttributeLedger,
 ): Partial<Record<MemberSlot, MemberTaxState>> {
   const state: Partial<Record<MemberSlot, MemberTaxState>> = {};
 
   for (const frame of memberFrames) {
     const rrifShare = mandatoryMinimumWithdrawals.rrifBySlot[frame.slot] ?? 0;
     const lifShare = mandatoryMinimumWithdrawals.lifBySlot[frame.slot] ?? 0;
-    const taxableIncome = Math.max(
+    const ordinaryTaxableIncome = Math.max(
       0,
       frame.employmentIncome +
         frame.cppQppIncome +
@@ -868,7 +930,17 @@ function buildBaseTaxState(
     );
 
     state[frame.slot] = {
-      taxableIncome,
+      ordinaryTaxableIncome,
+      grossTaxableCapitalGains: frame.taxableCapitalGainFromReturnOfCapital,
+      allowableCapitalLossesCurrentYear: 0,
+      openingNetCapitalLossCarryforward:
+        getTaxAttributeLedgerBySlot(taxAttributes, frame.slot)
+          .netCapitalLossCarryforward,
+      netCapitalLossCarryforwardUsed: 0,
+      closingNetCapitalLossCarryforward:
+        getTaxAttributeLedgerBySlot(taxAttributes, frame.slot)
+          .netCapitalLossCarryforward,
+      taxableIncome: ordinaryTaxableIncome,
       taxes: 0,
       oasRecoveryTax: 0,
       marginalRate: 0,
@@ -930,30 +1002,69 @@ function finalizeMemberTaxState(
       continue;
     }
 
-    const taxEstimate = estimateIncomeTax({
-      taxableIncome: memberState.taxableIncome,
-      province: memberState.province,
-      calendarYear,
-      age: memberState.age,
-      eligiblePensionIncome: memberState.eligiblePensionIncome,
-      eligibleDividendIncome: memberState.eligibleDividendIncome,
-      nonEligibleDividendIncome: memberState.nonEligibleDividendIncome,
-      foreignNonBusinessIncome: memberState.foreignNonBusinessIncome,
-      foreignNonBusinessIncomeTaxPaid: memberState.foreignNonBusinessIncomeTaxPaid,
-    });
-
-    memberState.taxes = taxEstimate.totalTax;
-    memberState.marginalRate = clampRate(taxEstimate.marginalRate);
-    memberState.oasRecoveryTax = estimateOasRecoveryTax(
-      context,
-      calendarYear,
-      memberState.taxableIncome,
-      memberState.oasIncome,
-    );
-    memberState.warnings.push(...taxEstimate.warnings);
+    refreshMemberTaxState(context, calendarYear, memberState);
   }
 
   return finalizedState;
+}
+
+function refreshMemberTaxState(
+  context: NormalizedContext,
+  calendarYear: number,
+  memberState: MemberTaxState,
+): void {
+  const currentYearNetCapitalLoss = Math.max(
+    0,
+    memberState.allowableCapitalLossesCurrentYear -
+      memberState.grossTaxableCapitalGains,
+  );
+  const remainingTaxableCapitalGainsAfterCurrentLosses = Math.max(
+    0,
+    memberState.grossTaxableCapitalGains -
+      memberState.allowableCapitalLossesCurrentYear,
+  );
+  const netCapitalLossCarryforwardUsed = Math.min(
+    memberState.openingNetCapitalLossCarryforward,
+    remainingTaxableCapitalGainsAfterCurrentLosses,
+  );
+  const taxableCapitalGains = Math.max(
+    0,
+    remainingTaxableCapitalGainsAfterCurrentLosses -
+      netCapitalLossCarryforwardUsed,
+  );
+  const closingNetCapitalLossCarryforward =
+    memberState.openingNetCapitalLossCarryforward -
+    netCapitalLossCarryforwardUsed +
+    currentYearNetCapitalLoss;
+
+  memberState.netCapitalLossCarryforwardUsed = netCapitalLossCarryforwardUsed;
+  memberState.closingNetCapitalLossCarryforward =
+    closingNetCapitalLossCarryforward;
+  memberState.taxableCapitalGains = taxableCapitalGains;
+  memberState.taxableIncome =
+    memberState.ordinaryTaxableIncome + taxableCapitalGains;
+
+  const taxEstimate = estimateIncomeTax({
+    taxableIncome: memberState.taxableIncome,
+    province: memberState.province,
+    calendarYear,
+    age: memberState.age,
+    eligiblePensionIncome: memberState.eligiblePensionIncome,
+    eligibleDividendIncome: memberState.eligibleDividendIncome,
+    nonEligibleDividendIncome: memberState.nonEligibleDividendIncome,
+    foreignNonBusinessIncome: memberState.foreignNonBusinessIncome,
+    foreignNonBusinessIncomeTaxPaid: memberState.foreignNonBusinessIncomeTaxPaid,
+  });
+
+  memberState.taxes = taxEstimate.totalTax;
+  memberState.marginalRate = clampRate(taxEstimate.marginalRate);
+  memberState.oasRecoveryTax = estimateOasRecoveryTax(
+    context,
+    calendarYear,
+    memberState.taxableIncome,
+    memberState.oasIncome,
+  );
+  memberState.warnings.push(...taxEstimate.warnings);
 }
 
 function applyPensionIncomeSplittingHeuristic(
@@ -1065,13 +1176,16 @@ function evaluatePensionSplitCandidate(
     const receiver = candidateState[transferTo];
 
     if (donor && receiver) {
-      donor.taxableIncome = Math.max(0, donor.taxableIncome - transferAmount);
+      donor.ordinaryTaxableIncome = Math.max(
+        0,
+        donor.ordinaryTaxableIncome - transferAmount,
+      );
       donor.eligiblePensionIncome = Math.max(
         0,
         donor.eligiblePensionIncome - transferAmount,
       );
       donor.pensionIncomeSplitOut = transferAmount;
-      receiver.taxableIncome += transferAmount;
+      receiver.ordinaryTaxableIncome += transferAmount;
       receiver.eligiblePensionIncome += transferAmount;
       receiver.pensionIncomeSplitIn = transferAmount;
     }
@@ -1122,6 +1236,13 @@ function cloneMemberTaxState(
           warnings: [...state.partner.warnings],
         }
       : undefined,
+  };
+}
+
+function cloneSingleMemberTaxState(state: MemberTaxState): MemberTaxState {
+  return {
+    ...state,
+    warnings: [...state.warnings],
   };
 }
 
@@ -1217,38 +1338,14 @@ function executeDrawdown(
 
         taxableWithdrawals += grossWithdrawal;
         realizedCapitalGains += Math.max(0, breakdown.realizedCapitalGain);
-        taxableCapitalGains += breakdown.taxableCapitalGain;
-        taxState.realizedCapitalGains += Math.max(0, breakdown.realizedCapitalGain);
-        taxState.taxableCapitalGains += breakdown.taxableCapitalGain;
-        taxState.taxableIncome += breakdown.taxableCapitalGain;
-
-        const updatedTaxEstimate = estimateIncomeTax({
-          taxableIncome: taxState.taxableIncome,
-          province: taxState.province,
-          calendarYear: period.calendarYear,
-          age: taxState.age,
-          eligiblePensionIncome: taxState.eligiblePensionIncome,
-          eligibleDividendIncome: taxState.eligibleDividendIncome,
-          nonEligibleDividendIncome: taxState.nonEligibleDividendIncome,
-          foreignNonBusinessIncome: taxState.foreignNonBusinessIncome,
-          foreignNonBusinessIncomeTaxPaid: taxState.foreignNonBusinessIncomeTaxPaid,
-        });
-
-        taxState.taxes = updatedTaxEstimate.totalTax;
-        taxState.marginalRate = clampRate(updatedTaxEstimate.marginalRate);
-        taxState.oasRecoveryTax = estimateOasRecoveryTax(
-          context,
-          period.calendarYear,
-          taxState.taxableIncome,
-          taxState.oasIncome,
+        taxableCapitalGains += Math.max(
+          0,
+          breakdown.taxableCapitalGain - breakdown.allowableCapitalLoss,
         );
-        taxState.warnings.push(...updatedTaxEstimate.warnings);
-
-        if (breakdown.ignoredCapitalLoss) {
-          warnings.push(
-            "A non-registered withdrawal realized a capital loss, but capital-loss carryforward logic is not yet modeled, so the taxable benefit of that loss was ignored.",
-          );
-        }
+        taxState.realizedCapitalGains += Math.max(0, breakdown.realizedCapitalGain);
+        taxState.grossTaxableCapitalGains += breakdown.taxableCapitalGain;
+        taxState.allowableCapitalLossesCurrentYear += breakdown.allowableCapitalLoss;
+        refreshMemberTaxState(context, period.calendarYear, taxState);
 
         const netWithdrawal =
           grossWithdrawal -
@@ -1312,33 +1409,13 @@ function executeDrawdown(
         account.lif -= grossWithdrawal;
         lifWithdrawals += grossWithdrawal;
         lockedInLimit.withdrawnSoFar += grossWithdrawal;
-        taxState.taxableIncome += grossWithdrawal;
+        taxState.ordinaryTaxableIncome += grossWithdrawal;
 
         if (taxState.age >= 65) {
           taxState.eligiblePensionIncome += grossWithdrawal;
         }
 
-        const updatedTaxEstimate = estimateIncomeTax({
-          taxableIncome: taxState.taxableIncome,
-          province: taxState.province,
-          calendarYear: period.calendarYear,
-          age: taxState.age,
-          eligiblePensionIncome: taxState.eligiblePensionIncome,
-          eligibleDividendIncome: taxState.eligibleDividendIncome,
-          nonEligibleDividendIncome: taxState.nonEligibleDividendIncome,
-          foreignNonBusinessIncome: taxState.foreignNonBusinessIncome,
-          foreignNonBusinessIncomeTaxPaid: taxState.foreignNonBusinessIncomeTaxPaid,
-        });
-
-        taxState.taxes = updatedTaxEstimate.totalTax;
-        taxState.marginalRate = clampRate(updatedTaxEstimate.marginalRate);
-        taxState.oasRecoveryTax = estimateOasRecoveryTax(
-          context,
-          period.calendarYear,
-          taxState.taxableIncome,
-          taxState.oasIncome,
-        );
-        taxState.warnings.push(...updatedTaxEstimate.warnings);
+        refreshMemberTaxState(context, period.calendarYear, taxState);
 
         const netWithdrawal =
           grossWithdrawal -
@@ -1382,30 +1459,9 @@ function executeDrawdown(
             : taxState.eligiblePensionIncome;
         account[step.source] -= grossWithdrawal;
         rrspRrifWithdrawals += grossWithdrawal;
-        taxState.taxableIncome += grossWithdrawal;
+        taxState.ordinaryTaxableIncome += grossWithdrawal;
         taxState.eligiblePensionIncome = nextEligiblePensionIncome;
-
-        const updatedTaxEstimate = estimateIncomeTax({
-          taxableIncome: taxState.taxableIncome,
-          province: taxState.province,
-          calendarYear: period.calendarYear,
-          age: taxState.age,
-          eligiblePensionIncome: taxState.eligiblePensionIncome,
-          eligibleDividendIncome: taxState.eligibleDividendIncome,
-          nonEligibleDividendIncome: taxState.nonEligibleDividendIncome,
-          foreignNonBusinessIncome: taxState.foreignNonBusinessIncome,
-          foreignNonBusinessIncomeTaxPaid: taxState.foreignNonBusinessIncomeTaxPaid,
-        });
-
-        taxState.taxes = updatedTaxEstimate.totalTax;
-        taxState.marginalRate = clampRate(updatedTaxEstimate.marginalRate);
-        taxState.oasRecoveryTax = estimateOasRecoveryTax(
-          context,
-          period.calendarYear,
-          taxState.taxableIncome,
-          taxState.oasIncome,
-        );
-        taxState.warnings.push(...updatedTaxEstimate.warnings);
+        refreshMemberTaxState(context, period.calendarYear, taxState);
 
         const netWithdrawal =
           grossWithdrawal -
@@ -1968,32 +2024,17 @@ function estimateNetFromRegisteredWithdrawal(
   grossWithdrawal: number,
   withdrawalCountsAsEligiblePensionIncome: boolean,
 ): number {
-  const updatedTaxableIncome = taxState.taxableIncome + grossWithdrawal;
-  const updatedEligiblePensionIncome = withdrawalCountsAsEligiblePensionIncome
-    ? taxState.eligiblePensionIncome + grossWithdrawal
-    : taxState.eligiblePensionIncome;
-  const updatedTax = estimateIncomeTax({
-    taxableIncome: updatedTaxableIncome,
-    province: taxState.province,
-    calendarYear,
-    age: taxState.age,
-    eligiblePensionIncome: updatedEligiblePensionIncome,
-    eligibleDividendIncome: taxState.eligibleDividendIncome,
-    nonEligibleDividendIncome: taxState.nonEligibleDividendIncome,
-    foreignNonBusinessIncome: taxState.foreignNonBusinessIncome,
-    foreignNonBusinessIncomeTaxPaid: taxState.foreignNonBusinessIncomeTaxPaid,
-  }).totalTax;
-  const updatedOasRecovery = estimateOasRecoveryTax(
-    context,
-    calendarYear,
-    updatedTaxableIncome,
-    taxState.oasIncome,
-  );
+  const simulatedTaxState = cloneSingleMemberTaxState(taxState);
+  simulatedTaxState.ordinaryTaxableIncome += grossWithdrawal;
+  simulatedTaxState.eligiblePensionIncome = withdrawalCountsAsEligiblePensionIncome
+    ? simulatedTaxState.eligiblePensionIncome + grossWithdrawal
+    : simulatedTaxState.eligiblePensionIncome;
+  refreshMemberTaxState(context, calendarYear, simulatedTaxState);
 
   return (
     grossWithdrawal -
-    (updatedTax - taxState.taxes) -
-    (updatedOasRecovery - taxState.oasRecoveryTax)
+    (simulatedTaxState.taxes - taxState.taxes) -
+    (simulatedTaxState.oasRecoveryTax - taxState.oasRecoveryTax)
   );
 }
 
@@ -2056,29 +2097,16 @@ function estimateNetFromNonRegisteredWithdrawal(
     availableCostBase,
     context.rules.taxableAccounts.capitalGainsInclusionRate,
   );
-  const updatedTaxableIncome = taxState.taxableIncome + breakdown.taxableCapitalGain;
-  const updatedTax = estimateIncomeTax({
-    taxableIncome: updatedTaxableIncome,
-    province: taxState.province,
-    calendarYear,
-    age: taxState.age,
-    eligiblePensionIncome: taxState.eligiblePensionIncome,
-    eligibleDividendIncome: taxState.eligibleDividendIncome,
-    nonEligibleDividendIncome: taxState.nonEligibleDividendIncome,
-    foreignNonBusinessIncome: taxState.foreignNonBusinessIncome,
-    foreignNonBusinessIncomeTaxPaid: taxState.foreignNonBusinessIncomeTaxPaid,
-  }).totalTax;
-  const updatedOasRecovery = estimateOasRecoveryTax(
-    context,
-    calendarYear,
-    updatedTaxableIncome,
-    taxState.oasIncome,
-  );
+  const simulatedTaxState = cloneSingleMemberTaxState(taxState);
+  simulatedTaxState.grossTaxableCapitalGains += breakdown.taxableCapitalGain;
+  simulatedTaxState.allowableCapitalLossesCurrentYear +=
+    breakdown.allowableCapitalLoss;
+  refreshMemberTaxState(context, calendarYear, simulatedTaxState);
 
   return (
     grossWithdrawal -
-    (updatedTax - taxState.taxes) -
-    (updatedOasRecovery - taxState.oasRecoveryTax)
+    (simulatedTaxState.taxes - taxState.taxes) -
+    (simulatedTaxState.oasRecoveryTax - taxState.oasRecoveryTax)
   );
 }
 
@@ -2093,7 +2121,7 @@ function calculateTaxableWithdrawalBreakdown(
       costBaseReduction: 0,
       realizedCapitalGain: 0,
       taxableCapitalGain: 0,
-      ignoredCapitalLoss: false,
+      allowableCapitalLoss: 0,
     };
   }
 
@@ -2107,12 +2135,16 @@ function calculateTaxableWithdrawalBreakdown(
     realizedCapitalGain > 0
       ? realizedCapitalGain * inclusionRate
       : 0;
+  const allowableCapitalLoss =
+    realizedCapitalGain < 0
+      ? Math.abs(realizedCapitalGain) * inclusionRate
+      : 0;
 
   return {
     costBaseReduction,
     realizedCapitalGain,
     taxableCapitalGain,
-    ignoredCapitalLoss: realizedCapitalGain < -0.01,
+    allowableCapitalLoss,
   };
 }
 
@@ -2414,7 +2446,7 @@ function buildYearWarnings(
       frame.member.accounts.nonRegistered + 0.01
     ) {
       warnings.push(
-        "Non-registered adjusted cost base exceeds the current market value. Capital-loss carryforwards are not yet modeled, so loss-heavy taxable drawdown cases remain approximate.",
+        "Non-registered adjusted cost base exceeds the current market value. Capital losses are now modeled with carryforward treatment, but terminal-return and carry-back handling remain outside the current scaffold.",
       );
     }
 
@@ -2494,7 +2526,7 @@ function buildAssumptionList(context: NormalizedContext): string[] {
     "OAS recovery tax is estimated with prior-year threshold mapping and capped by modeled OAS income.",
     "Drawdown currently supports a practical blended heuristic, not full optimization.",
     "Locked-in accounts now support baseline LIRA-to-LIF conversion, RRIF-style minimums, and jurisdiction-aware fallback maximums, with manual annual overrides preferred when available.",
-    "Non-registered withdrawals now track adjusted cost base and realize taxable capital gains using the baseline Canadian inclusion rate, while explicit taxable-account interest, foreign dividends, Canadian eligible / non-eligible dividends, and return-of-capital cash distributions can be modeled annually. A baseline federal foreign tax credit approximation is now supported for foreign non-business income, while provincial credits, return-of-capital market-value effects, and capital-loss carryforward handling remain incomplete.",
+    "Non-registered withdrawals now track adjusted cost base, realize taxable capital gains, and carry forward net capital losses using the baseline Canadian inclusion rate, while explicit taxable-account interest, foreign dividends, Canadian eligible / non-eligible dividends, and return-of-capital cash distributions can be modeled annually. A baseline federal foreign tax credit approximation is now supported for foreign non-business income, while provincial credits, return-of-capital market-value effects, and carry-back or terminal-loss handling remain incomplete.",
     "Pension splitting currently uses an annual household heuristic on planned eligible pension income before discretionary registered drawdown.",
     "Immigrant and partial-benefit support is modeled through statement, manual, residence-year, and foreign-pension inputs.",
   ];
@@ -2516,6 +2548,13 @@ function getAccountLedgerBySlot(
   slot: MemberSlot,
 ): AccountLedger {
   return slot === "primary" ? balances.primary : balances.partner!;
+}
+
+function getTaxAttributeLedgerBySlot(
+  taxAttributes: HouseholdTaxAttributeLedger,
+  slot: MemberSlot,
+): TaxAttributeLedger {
+  return slot === "primary" ? taxAttributes.primary : taxAttributes.partner!;
 }
 
 function estimateScheduledCashFlowTotal(
@@ -2609,6 +2648,35 @@ function cloneHouseholdLedger(balances: HouseholdLedger): HouseholdLedger {
   return {
     primary: { ...balances.primary },
     partner: balances.partner ? { ...balances.partner } : undefined,
+  };
+}
+
+function cloneHouseholdTaxAttributeLedger(
+  taxAttributes: HouseholdTaxAttributeLedger,
+): HouseholdTaxAttributeLedger {
+  return {
+    primary: { ...taxAttributes.primary },
+    partner: taxAttributes.partner ? { ...taxAttributes.partner } : undefined,
+  };
+}
+
+function buildNextHouseholdTaxAttributeLedger(
+  memberTaxState: Partial<Record<MemberSlot, MemberTaxState>>,
+  priorTaxAttributes: HouseholdTaxAttributeLedger,
+): HouseholdTaxAttributeLedger {
+  return {
+    primary: {
+      netCapitalLossCarryforward:
+        memberTaxState.primary?.closingNetCapitalLossCarryforward ??
+        priorTaxAttributes.primary.netCapitalLossCarryforward,
+    },
+    partner: priorTaxAttributes.partner
+      ? {
+          netCapitalLossCarryforward:
+            memberTaxState.partner?.closingNetCapitalLossCarryforward ??
+            priorTaxAttributes.partner.netCapitalLossCarryforward,
+        }
+      : undefined,
   };
 }
 
