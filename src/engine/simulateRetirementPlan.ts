@@ -170,6 +170,7 @@ interface TerminalEstateEstimate {
   afterTaxEstateValue: number;
   terminalTaxLiability: number;
   probateOrEstateAdminCost?: number;
+  estateProcedureLabel?: string;
   warnings: string[];
 }
 
@@ -184,6 +185,7 @@ interface DeathYearProbateSnapshot {
   probateBaseValue: number;
   probateExcludedAssets: number;
   probateCost?: number;
+  estateProcedureLabel?: string;
   warnings: string[];
 }
 
@@ -542,6 +544,7 @@ function projectSingleYear(
         deathYearProbateSnapshot.probateCost === undefined
           ? undefined
           : roundCurrency(deathYearProbateSnapshot.probateCost),
+      deathYearEstateProcedure: deathYearProbateSnapshot.estateProcedureLabel,
       federalForeignTaxCredit: roundCurrency(
         sumMemberTaxState(memberTaxState, (state) => state.federalForeignTaxCredit),
       ),
@@ -3929,6 +3932,9 @@ function estimateDeathYearProbateSnapshot(
 
   let probateBaseValue = 0;
   let probateExcludedAssets = 0;
+  let knownProbateCost = 0;
+  let probateCostIsFullyKnown = true;
+  const estateProcedureLabels = new Set<string>();
   const warnings: string[] = [];
 
   for (const frame of deathYearFrames) {
@@ -3976,7 +3982,9 @@ function estimateDeathYearProbateSnapshot(
 
     const nonRegisteredProbate = Math.max(0, account.nonRegistered - nonRegisteredJointShare);
     const cashProbate = Math.max(0, account.cash - cashJointShare);
-    probateBaseValue += registeredProbate + nonRegisteredProbate + cashProbate;
+    const decedentProbateBase =
+      registeredProbate + nonRegisteredProbate + cashProbate;
+    probateBaseValue += decedentProbateBase;
     probateExcludedAssets += nonRegisteredJointShare + cashJointShare;
 
     if (nonRegisteredJointShare > 0.01 || cashJointShare > 0.01) {
@@ -3985,23 +3993,38 @@ function estimateDeathYearProbateSnapshot(
           nonRegisteredJointShare + cashJointShare,
         )} from ${labelForSlot(
           frame.slot,
-        ).toLowerCase()}'s death-year probate proxy because those assets were marked as jointly held with the surviving spouse.`,
+        ).toLowerCase()}'s death-year estate-settlement proxy because those assets were marked as jointly held with the surviving spouse.`,
       );
+    }
+
+    const estateProcedureEstimate = estimateEstateSettlementCostForMember(
+      frame.member,
+      frame.member.profile.provinceAtRetirement,
+      decedentProbateBase,
+      warnings,
+    );
+
+    if (estateProcedureEstimate.procedureLabel) {
+      estateProcedureLabels.add(estateProcedureEstimate.procedureLabel);
+    }
+
+    if (estateProcedureEstimate.cost === undefined) {
+      probateCostIsFullyKnown = false;
+    } else {
+      knownProbateCost += estateProcedureEstimate.cost;
     }
   }
 
   const probateCost =
     probateBaseValue <= 0.01
       ? 0
-      : estimateProvinceProbateCost(
-          context.input.household.primary.profile.provinceAtRetirement,
-          probateBaseValue,
-          warnings,
-        );
+      : probateCostIsFullyKnown
+        ? knownProbateCost
+        : undefined;
 
   if (probateBaseValue > 0.01 || probateExcludedAssets > 0.01) {
     warnings.push(
-      `Death-year probate proxy for ${period.calendarYear} is a baseline estimate that excludes direct beneficiary designations and any user-entered joint-with-surviving-spouse shares, but still depends on real title form, beneficial ownership, and province-specific estate procedure.`,
+      `Death-year estate-settlement proxy for ${period.calendarYear} is a baseline estimate that excludes direct beneficiary designations and any user-entered joint-with-surviving-spouse shares, but still depends on real title form, beneficial ownership, and province-specific estate procedure.`,
     );
   }
 
@@ -4009,6 +4032,12 @@ function estimateDeathYearProbateSnapshot(
     probateBaseValue,
     probateExcludedAssets,
     probateCost,
+    estateProcedureLabel:
+      estateProcedureLabels.size === 0
+        ? undefined
+        : estateProcedureLabels.size === 1
+          ? Array.from(estateProcedureLabels)[0]
+          : "Multiple estate procedures in the same calendar year",
     warnings,
   };
 }
@@ -4242,6 +4271,7 @@ function summarizeProjection(
       terminalEstateEstimate.probateOrEstateAdminCost === undefined
         ? undefined
         : roundCurrency(terminalEstateEstimate.probateOrEstateAdminCost),
+    estimatedEstateProcedure: terminalEstateEstimate.estateProcedureLabel,
     notableWarnings,
   };
 }
@@ -4349,7 +4379,7 @@ function estimateTerminalEstate(
     terminalTaxLiability += terminalTaxEstimate.totalTax;
   }
 
-  const probateOrEstateAdminCost = estimateProbateOrEstateAdminCost(
+  const probateOrEstateAdminCostEstimate = estimateProbateOrEstateAdminCost(
     context,
     years,
     balances,
@@ -4357,14 +4387,17 @@ function estimateTerminalEstate(
   );
   const afterTaxEstateValue = Math.max(
     0,
-    grossEstateValue - terminalTaxLiability - (probateOrEstateAdminCost ?? 0),
+    grossEstateValue -
+      terminalTaxLiability -
+      (probateOrEstateAdminCostEstimate.cost ?? 0),
   );
 
   return {
     grossEstateValue,
     afterTaxEstateValue,
     terminalTaxLiability,
-    probateOrEstateAdminCost,
+    probateOrEstateAdminCost: probateOrEstateAdminCostEstimate.cost,
+    estateProcedureLabel: probateOrEstateAdminCostEstimate.procedureLabel,
     warnings,
   };
 }
@@ -4374,11 +4407,11 @@ function estimateProbateOrEstateAdminCost(
   years: ProjectionYear[],
   balances: HouseholdLedger,
   warnings: string[],
-): number | undefined {
+): { cost: number | undefined; procedureLabel?: string } {
   const lastYear = years.at(-1);
 
   if (!lastYear) {
-    return undefined;
+    return { cost: undefined };
   }
 
   const projectionReachedLastModeledDeaths = getMemberEntries(context.input).every(
@@ -4387,16 +4420,17 @@ function estimateProbateOrEstateAdminCost(
   );
 
   if (!projectionReachedLastModeledDeaths) {
-    return undefined;
+    return { cost: undefined };
   }
 
   const probateBaseValue = sumProbateProxyBalances(context, balances, warnings);
 
   if (probateBaseValue <= 0.01) {
-    return 0;
+    return { cost: 0 };
   }
 
-  const province = resolveTerminalEstateProvince(context, years, balances);
+  const terminalEstateMember = resolveTerminalEstateMember(context, years, balances);
+  const province = terminalEstateMember.profile.provinceAtRetirement;
 
   warnings.push(
     "Probate / estate administration cost is a baseline proxy that assumes the modeled estate requires a grant or certificate and that beneficiary designations or joint ownership have not removed assets from the estate.",
@@ -4408,24 +4442,12 @@ function estimateProbateOrEstateAdminCost(
     );
   }
 
-  switch (province) {
-    case "ON":
-      return estimateOntarioEstateAdministrationTax(probateBaseValue);
-    case "BC":
-      return estimateBritishColumbiaProbateFee(probateBaseValue);
-    case "AB":
-      return estimateAlbertaProbateFee(probateBaseValue);
-    case "QC":
-      warnings.push(
-        "Quebec probate cost is not being estimated because it depends heavily on will form. Notarial wills generally avoid probate, while holograph and witnessed wills generally require verification.",
-      );
-      return undefined;
-    default:
-      warnings.push(
-        `Probate proxy is not yet modeled for ${province}. Gross and after-tax estate values currently exclude province-specific estate administration costs there.`,
-      );
-      return undefined;
-  }
+  return estimateEstateSettlementCostForMember(
+    terminalEstateMember,
+    province,
+    probateBaseValue,
+    warnings,
+  );
 }
 
 function buildAssumptionList(context: NormalizedContext): string[] {
@@ -4446,9 +4468,9 @@ function buildAssumptionList(context: NormalizedContext): string[] {
     "Survivor years now include baseline CPP/QPP survivor-pension support when the surviving spouse is not already on a combined public-pension path or when a manual annual survivor-benefit override is supplied, but full Service Canada / Retraite Quebec combined-benefit math remains incomplete.",
     "Survivor-year spending defaults to 72% of the couple after-tax spending target unless expenseProfile.survivorSpendingPercentOfCouple is explicitly provided.",
     "Death years use a baseline mid-year heuristic: recurring income, contributions, and mandatory RRIF/LIF withdrawals are prorated to 50%, and couple spending transitions halfway toward the survivor spending path for that year.",
-    "Death-year annual results now add a baseline CRA final-return adjustment. Registered accounts marked for a surviving spouse can defer terminal income on the current baseline, registered accounts marked for another direct beneficiary still trigger terminal tax while leaving the surviving household, and user-entered joint-with-surviving-spouse shares can reduce the death-year probate proxy for cash and non-registered assets. Optional returns and broader beneficial-ownership analysis remain separate roadmap items.",
+    "Death-year annual results now add a baseline CRA final-return adjustment. Registered accounts marked for a surviving spouse can defer terminal income on the current baseline, registered accounts marked for another direct beneficiary still trigger terminal tax while leaving the surviving household, and user-entered joint-with-surviving-spouse shares can reduce the death-year estate-settlement proxy for cash and non-registered assets. Quebec will-form branching is now baseline-supported when estateAdministrationProfile is supplied, but optional returns and broader beneficial-ownership analysis remain separate roadmap items.",
     "Projection length now follows the longest modeled remaining lifetime in the household, capped by household.maxProjectionAge relative to the primary member's age.",
-    "Summary estate values now include a baseline projection-end liquidation proxy: remaining RRSP / RRIF / LIRA / LIF balances are treated as taxable on a terminal return, net capital losses can offset capital gains and then other income on a final-return baseline, and ON / BC / AB probate-style estate administration costs are approximated when the projection reaches the modeled final death. Direct beneficiary designations can now remove registered assets from the probate proxy, while broader joint ownership, Quebec will-form detail, and DC pension death treatment remain incomplete.",
+    "Summary estate values now include a baseline projection-end liquidation proxy: remaining RRSP / RRIF / LIRA / LIF balances are treated as taxable on a terminal return, net capital losses can offset capital gains and then other income on a final-return baseline, ON / BC / AB probate-style estate administration costs are approximated when the projection reaches the modeled final death, and Quebec notarial-versus-verification branching can now be reflected when estateAdministrationProfile is supplied. Direct beneficiary designations can now remove registered assets from the probate proxy, while broader joint ownership, exact Quebec verification fees, and DC pension death treatment remain incomplete.",
   ];
 }
 
@@ -4817,10 +4839,18 @@ function resolveTerminalEstateProvince(
   years: ProjectionYear[],
   balances: HouseholdLedger,
 ): ProvinceCode {
+  return resolveTerminalEstateMember(context, years, balances).profile.provinceAtRetirement;
+}
+
+function resolveTerminalEstateMember(
+  context: NormalizedContext,
+  years: ProjectionYear[],
+  balances: HouseholdLedger,
+): HouseholdMemberInput {
   const lastYear = years.at(-1);
 
   if (!lastYear) {
-    return context.input.household.primary.profile.provinceAtRetirement;
+    return context.input.household.primary;
   }
 
   const slotBalances: Array<{ slot: MemberSlot; balance: number }> = [
@@ -4855,17 +4885,17 @@ function resolveTerminalEstateProvince(
   )?.member;
 
   if (!member) {
-    return context.input.household.primary.profile.provinceAtRetirement;
+    return context.input.household.primary;
   }
 
   const ageGapToLifeExpectancy =
     member.profile.lifeExpectancy - getAgeBySlot(lastYear, selectedSlot);
 
   if (ageGapToLifeExpectancy > 0.01) {
-    return context.input.household.primary.profile.provinceAtRetirement;
+    return context.input.household.primary;
   }
 
-  return member.profile.provinceAtRetirement;
+  return member;
 }
 
 function estimateOntarioEstateAdministrationTax(estateValue: number): number {
@@ -4933,6 +4963,98 @@ function estimateProvinceProbateCost(
       );
       return undefined;
   }
+}
+
+function estimateEstateSettlementCostForMember(
+  member: HouseholdMemberInput,
+  province: ProvinceCode,
+  estateValue: number,
+  warnings: string[],
+): { cost: number | undefined; procedureLabel?: string } {
+  switch (province) {
+    case "ON":
+      return {
+        cost: estimateOntarioEstateAdministrationTax(estateValue),
+        procedureLabel: "Ontario certificate of appointment proxy",
+      };
+    case "BC":
+      return {
+        cost: estimateBritishColumbiaProbateFee(estateValue),
+        procedureLabel: "British Columbia probate fee proxy",
+      };
+    case "AB":
+      return {
+        cost: estimateAlbertaProbateFee(estateValue),
+        procedureLabel: "Alberta probate fee proxy",
+      };
+    case "QC":
+      return estimateQuebecEstateSettlementCost(member, warnings);
+    default:
+      warnings.push(
+        `Probate proxy is not yet modeled for ${province}. Gross and after-tax estate values currently exclude province-specific estate administration costs there.`,
+      );
+      return {
+        cost: undefined,
+        procedureLabel: `${province} estate procedure not modeled`,
+      };
+  }
+}
+
+function estimateQuebecEstateSettlementCost(
+  member: HouseholdMemberInput,
+  warnings: string[],
+): { cost: number | undefined; procedureLabel?: string } {
+  const profile = member.estateAdministrationProfile;
+  const willForm = profile?.quebecWillForm ?? "unknown";
+  const verificationMethod =
+    profile?.quebecWillVerificationMethod ??
+    (willForm === "notarial" ? "not-required" : "unknown");
+  const manualCost = profile?.manualQuebecVerificationCost;
+
+  if (willForm === "notarial") {
+    if (manualCost !== undefined) {
+      warnings.push(
+        "Quebec notarial will path is using a manual estate-settlement cost override. Verification is still assumed not to be required.",
+      );
+      return {
+        cost: Math.max(0, manualCost),
+        procedureLabel: "Quebec notarial will (no verification required)",
+      };
+    }
+
+    warnings.push(
+      "Quebec notarial will path assumes no probate or verification cost. Will-search certificates, liquidator fees, and optional professional fees are not modeled unless a manualQuebecVerificationCost override is supplied.",
+    );
+    return {
+      cost: 0,
+      procedureLabel: "Quebec notarial will (no verification required)",
+    };
+  }
+
+  const procedureLabel =
+    verificationMethod === "court"
+      ? "Quebec will verification by Superior Court"
+      : verificationMethod === "notary"
+        ? "Quebec will verification by notary"
+        : "Quebec non-notarial will verification required";
+
+  if (manualCost !== undefined) {
+    warnings.push(
+      "Quebec non-notarial will path is using a manual verification-cost override. Court or notary fees beyond that override are not separately modeled.",
+    );
+    return {
+      cost: Math.max(0, manualCost),
+      procedureLabel,
+    };
+  }
+
+  warnings.push(
+    "Quebec holograph and witnessed wills generally require verification by a notary or the Superior Court. Add estateAdministrationProfile.manualQuebecVerificationCost when you want the model to reflect that estate-settlement cost.",
+  );
+  return {
+    cost: undefined,
+    procedureLabel,
+  };
 }
 
 function clampRate(value: number): number {

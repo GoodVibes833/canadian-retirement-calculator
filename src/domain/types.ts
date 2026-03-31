@@ -38,6 +38,16 @@ export type BeneficiaryDesignationType =
   | "estate"
   | "spouse"
   | "other-beneficiary";
+export type QuebecWillForm =
+  | "notarial"
+  | "witnessed"
+  | "holograph"
+  | "unknown";
+export type QuebecWillVerificationMethod =
+  | "not-required"
+  | "notary"
+  | "court"
+  | "unknown";
 export type WithdrawalOrder =
   | "taxable-first"
   | "rrsp-rrif-first"
@@ -154,6 +164,13 @@ export interface IncomeTestedBenefitsBaseIncome {
   notes?: string;
 }
 
+export interface EstateAdministrationProfile {
+  quebecWillForm?: QuebecWillForm;
+  quebecWillVerificationMethod?: QuebecWillVerificationMethod;
+  manualQuebecVerificationCost?: number;
+  notes?: string;
+}
+
 export interface AnnualContributionPlan {
   rrsp: number;
   tfsa: number;
@@ -205,6 +222,7 @@ export interface HouseholdMemberInput {
   taxableAccountTaxProfile?: TaxableAccountTaxProfile;
   beneficiaryDesignations?: RegisteredAccountBeneficiaryDesignations;
   jointOwnershipProfile?: JointOwnershipProfile;
+  estateAdministrationProfile?: EstateAdministrationProfile;
   accounts: InvestmentAccountBalances;
   contributions: AnnualContributionPlan;
   annuityIncome?: ScheduledCashFlow[];

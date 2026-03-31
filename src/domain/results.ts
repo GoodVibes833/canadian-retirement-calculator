@@ -15,6 +15,7 @@ export interface ProjectionYear {
   deathYearEstimatedProbateBase?: number;
   deathYearProbateExcludedAssets?: number;
   deathYearEstimatedProbateCost?: number;
+  deathYearEstateProcedure?: string;
   federalForeignTaxCredit: number;
   provincialForeignTaxCredit: number;
   quebecCareerExtensionCredit: number;
@@ -51,6 +52,7 @@ export interface SimulationSummary {
   estimatedAfterTaxEstateValue?: number;
   estimatedTerminalTaxLiability?: number;
   estimatedProbateAndEstateAdminCost?: number;
+  estimatedEstateProcedure?: string;
   notableWarnings: string[];
 }
 

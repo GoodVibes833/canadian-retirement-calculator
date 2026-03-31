@@ -1795,6 +1795,61 @@ const taxChecks = [
       );
     },
   },
+  {
+    id: "T52",
+    label: "Quebec notarial will path avoids verification cost in estate summaries",
+    check() {
+      const input = buildQuebecEstateScenario();
+      input.household.primary.estateAdministrationProfile = {
+        quebecWillForm: "notarial",
+        quebecWillVerificationMethod: "not-required",
+      };
+
+      const result = simulateRetirementPlan(input, rules);
+      const firstYear = result.years[0];
+
+      assert(
+        firstYear.deathYearEstimatedProbateCost === 0,
+        "Quebec notarial will path should not add a verification cost in the death year.",
+      );
+      assert(
+        firstYear.deathYearEstateProcedure?.includes("notarial"),
+        "Death-year estate procedure should identify the Quebec notarial-will path.",
+      );
+      assert(
+        result.summary.estimatedProbateAndEstateAdminCost === 0,
+        "Quebec notarial will path should carry through as zero estimated estate-administration cost in the terminal summary.",
+      );
+    },
+  },
+  {
+    id: "T53",
+    label: "Quebec non-notarial will can use a manual verification-cost override",
+    check() {
+      const input = buildQuebecEstateScenario();
+      input.household.primary.estateAdministrationProfile = {
+        quebecWillForm: "witnessed",
+        quebecWillVerificationMethod: "court",
+        manualQuebecVerificationCost: 1800,
+      };
+
+      const result = simulateRetirementPlan(input, rules);
+      const firstYear = result.years[0];
+
+      assert(
+        firstYear.deathYearEstimatedProbateCost === 1800,
+        "Quebec non-notarial will should apply the manual verification-cost override in the death year.",
+      );
+      assert(
+        firstYear.deathYearEstateProcedure?.includes("Superior Court"),
+        "Death-year estate procedure should identify the court-verification path when requested.",
+      );
+      assert(
+        result.summary.estimatedProbateAndEstateAdminCost === 1800,
+        "Terminal estate summary should include the manual Quebec verification-cost override.",
+      );
+    },
+  },
 ];
 
 for (const check of taxChecks) {
@@ -1827,6 +1882,52 @@ function byPrimaryAge(result, age) {
   assert(year, `Expected projection year for primary age ${age}.`);
 
   return year;
+}
+
+function buildQuebecEstateScenario() {
+  const input = readJson("data/fixtures/golden/golden-on-single-saver.json");
+
+  input.household.primary.profile.currentAge = 85;
+  input.household.primary.profile.retirementAge = 65;
+  input.household.primary.profile.lifeExpectancy = 85;
+  input.household.primary.profile.provinceAtRetirement = "QC";
+  input.household.primary.profile.pensionPlan = "QPP";
+  input.household.primary.publicBenefits.cppQppEstimateMode = "manual-at-start-age";
+  input.household.primary.publicBenefits.manualMonthlyPensionAtStartAge = 0;
+  input.household.primary.publicBenefits.pensionStartAge = 65;
+  input.household.primary.publicBenefits.oasEligible = false;
+  input.household.primary.publicBenefits.oasStartAge = 65;
+  input.household.primary.publicBenefits.manualOasMonthlyAtStartAge = 0;
+  input.household.primary.employment.baseAnnualIncome = 0;
+  input.household.primary.employment.bonusAnnualIncome = 0;
+  input.household.primary.employment.annualGrowthRate = 0;
+  input.household.primary.accounts.rrsp = 120000;
+  input.household.primary.accounts.rrif = 0;
+  input.household.primary.accounts.tfsa = 20000;
+  input.household.primary.accounts.nonRegistered = 45000;
+  input.household.primary.accounts.cash = 15000;
+  input.household.primary.accounts.lira = 0;
+  input.household.primary.accounts.lif = 0;
+  input.household.primary.accounts.dcPension = 0;
+  input.household.primary.contributions.rrsp = 0;
+  input.household.primary.contributions.tfsa = 0;
+  input.household.primary.contributions.nonRegistered = 0;
+  input.household.primary.taxableAccountTaxProfile = {
+    nonRegisteredAdjustedCostBase: 45000,
+  };
+  input.household.expenseProfile.desiredAfterTaxSpending = 0;
+  input.household.expenseProfile.housing = 0;
+  input.household.expenseProfile.utilities = 0;
+  input.household.expenseProfile.food = 0;
+  input.household.expenseProfile.transportation = 0;
+  input.household.expenseProfile.healthcare = 0;
+  input.household.expenseProfile.insurance = 0;
+  input.household.expenseProfile.travelAndRecreation = 0;
+  input.household.expenseProfile.debtPayments = 0;
+  input.household.projectionStartYear = 2026;
+  input.household.maxProjectionAge = 85;
+
+  return input;
 }
 
 function calculateExpectedLifMaximum({
