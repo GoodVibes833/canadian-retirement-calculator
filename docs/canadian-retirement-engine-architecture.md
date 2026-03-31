@@ -122,9 +122,9 @@ Responsibilities:
 - baseline taxable-account interest and Canadian dividend character treatment,
 - baseline return-of-capital handling and foreign-dividend ordinary-income treatment,
 - baseline federal foreign tax credit approximation for foreign non-business income,
-- baseline ON / BC / AB provincial residual-credit approximation for foreign non-business income,
+- baseline ON / BC / AB / QC provincial residual-credit approximation for foreign non-business income,
 - baseline same-year and carryforward net-capital-loss handling,
-- later Quebec and fuller multi-country foreign tax credit detail.
+- later fuller Quebec form-level and multi-country foreign tax credit detail.
 
 ### 5.6 Reporting Module
 
@@ -160,7 +160,7 @@ The scaffold is intentionally incomplete in these areas:
 
 - taxes now use a 2026 federal and province-aware scaffold for ON, BC, AB, and QC, including basic personal, age, and pension-income credits for federal / ON / BC / AB and a partial Quebec path,
 - RRIF minimum withdrawals are modeled, and locked-in accounts now support baseline LIRA-to-LIF conversion plus ON / BC / AB fallback LIF guardrails with Quebec warning-heavy partial support,
-- non-registered withdrawals now track adjusted cost base and realize taxable capital gains using the ruleset inclusion rate, while explicit taxable-account interest, foreign dividends, Canadian eligible / non-eligible dividends, and return-of-capital cash distributions can be modeled annually; return-of-capital distributions also reduce modeled non-registered market value, and baseline federal plus ON / BC / AB provincial residual-credit foreign-tax-credit approximations are now supported alongside same-year and carryforward net-capital-loss handling, while Quebec and fuller multi-country foreign tax credit detail remain incomplete,
+- non-registered withdrawals now track adjusted cost base and realize taxable capital gains using the ruleset inclusion rate, while explicit taxable-account interest, foreign dividends, Canadian eligible / non-eligible dividends, and return-of-capital cash distributions can be modeled annually; return-of-capital distributions also reduce modeled non-registered market value, and baseline federal plus ON / BC / AB / QC provincial residual-credit foreign-tax-credit approximations are now supported alongside same-year and carryforward net-capital-loss handling, while fuller Quebec form-level and multi-country foreign tax credit detail remain incomplete,
 - GIS is not calculated,
 - pension splitting now uses an annual heuristic on planned eligible pension income before discretionary drawdown, not a full lifetime optimization,
 - spouse-aware survivor logic now includes a baseline spousal asset rollover and defined-benefit survivor continuation, but still omits CPP survivor pension and estate-tax effects,
@@ -172,7 +172,7 @@ The scaffold is intentionally incomplete in these areas:
 Recommended order from here:
 
 1. Replace locked-in fallback maximums with more exact institution-style annual calculations and fuller Alberta / BC formulas.
-2. Deepen Quebec-specific FRV and tax-path behavior, including Quebec-side foreign tax credit detail and more exact early-start QPP reduction handling.
+2. Deepen Quebec-specific FRV and tax-path behavior, including more exact early-start QPP reduction handling and fuller Quebec form-level foreign tax credit detail.
 3. Add GIS and Allowance.
 4. Add fuller survivor modeling including CPP survivor pension and death-year tax handling.
 5. Add more exact multi-country and treaty-aware foreign tax credit handling.

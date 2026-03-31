@@ -199,6 +199,8 @@ const PROVINCIAL_TAX_CONFIG_2026: Partial<Record<ProvinceCode, ProvincialTaxConf
 //   https://www.canada.ca/en/revenue-agency/services/forms-publications/tax-packages-years/general-income-tax-benefit-package/british-columbia/5010-pc.html
 // - Alberta 2025 package, line 69 provincial foreign tax credit:
 //   https://www.canada.ca/en/revenue-agency/services/forms-publications/tax-packages-years/general-income-tax-benefit-package/alberta/5009-pc.html
+// - Quebec line 409 foreign tax credit:
+//   https://www.revenuquebec.ca/en/citizens/income-tax-return/completing-your-income-tax-return/how-to-complete-your-income-tax-return/line-by-line-help/400-to-447-income-tax-and-contributions/line-409/
 
 export function estimateIncomeTax(
   input: TaxEstimateInput,
@@ -308,15 +310,11 @@ function estimateIncomeTaxInternal(
   );
 
   if ((input.foreignNonBusinessIncomeTaxPaid ?? 0) > 0) {
-    if (input.province === "QC") {
-      warnings.push(
-        "Foreign tax credit currently uses a baseline federal approximation, but Quebec provincial foreign tax credits are not yet modeled in the scaffold.",
-      );
-    } else {
-      warnings.push(
-        "Foreign tax credit currently uses a baseline federal approximation plus an ON / BC / AB provincial residual-credit approximation for foreign non-business income. Treaty-specific and multi-country detail are not yet modeled.",
-      );
-    }
+    warnings.push(
+      input.province === "QC"
+        ? "Foreign tax credit currently uses a baseline federal approximation plus a Quebec residual-credit approximation for foreign non-business income. Exact TP-772-V detail, treaty-specific handling, and multi-country cases are not yet modeled."
+        : "Foreign tax credit currently uses a baseline federal approximation plus an ON / BC / AB provincial residual-credit approximation for foreign non-business income. Treaty-specific and multi-country detail are not yet modeled.",
+    );
   }
 
   if (
@@ -475,7 +473,6 @@ function calculateProvincialForeignTaxCredit(
   const taxableIncome = Math.max(0, input.taxableIncome);
 
   if (
-    input.province === "QC" ||
     foreignIncome <= 0 ||
     foreignTaxPaid <= 0 ||
     taxableIncome <= 0 ||
@@ -484,10 +481,15 @@ function calculateProvincialForeignTaxCredit(
     return 0;
   }
 
-  const foreignIncomeShare = Math.min(1, foreignIncome / taxableIncome);
   const residualForeignTax = Math.max(0, foreignTaxPaid - federalForeignTaxCredit);
+  const foreignIncomeShare = Math.min(1, foreignIncome / taxableIncome);
   const maximumCredit =
-    provincialTaxBeforeForeignTaxCredit * foreignIncomeShare;
+    input.province === "QC"
+      ? Math.min(
+          residualForeignTax,
+          provincialTaxBeforeForeignTaxCredit * foreignIncomeShare,
+        )
+      : provincialTaxBeforeForeignTaxCredit * foreignIncomeShare;
 
   return Math.min(residualForeignTax, maximumCredit);
 }

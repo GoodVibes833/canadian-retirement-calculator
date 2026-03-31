@@ -738,7 +738,7 @@ const taxChecks = [
       );
       assert(
         creditedYear.warnings.some((warning) =>
-          warning.includes("ON / BC / AB provincial residual-credit support"),
+          warning.includes("ON / BC / AB / QC provincial residual-credit support"),
         ),
         "Credited foreign-dividend scenario should warn that the provincial foreign tax credit path is still baseline-only and partial.",
       );
@@ -797,6 +797,67 @@ const taxChecks = [
       assert(
         !age72.warnings.some((warning) => warning.includes("QPP early-start reductions")),
         "A delayed-start QPP case should not surface the early-start approximation warning.",
+      );
+    },
+  },
+  {
+    id: "T21",
+    label: "Quebec foreign tax credit baseline reduces provincial tax",
+    check() {
+      const withoutCredit = estimateIncomeTax({
+        taxableIncome: 70000,
+        province: "QC",
+        calendarYear: 2026,
+        age: 65,
+        foreignNonBusinessIncome: 10000,
+      });
+      const withCredit = estimateIncomeTax({
+        taxableIncome: 70000,
+        province: "QC",
+        calendarYear: 2026,
+        age: 65,
+        foreignNonBusinessIncome: 10000,
+        foreignNonBusinessIncomeTaxPaid: 1500,
+      });
+
+      assert(
+        withCredit.totalTax < withoutCredit.totalTax,
+        "Quebec foreign tax credit support should reduce total tax when foreign non-business tax was already paid.",
+      );
+      assert(
+        withCredit.provincialForeignTaxCredit > 0,
+        "Quebec baseline foreign tax credit path should produce a provincial foreign tax credit amount.",
+      );
+      assert(
+        withCredit.warnings.some((warning) =>
+          warning.includes("Quebec residual-credit approximation"),
+        ),
+        "Quebec foreign tax credit scenario should warn that the provincial path is still a baseline approximation.",
+      );
+    },
+  },
+  {
+    id: "T22",
+    label: "Quebec household scenario surfaces provincial foreign tax credits",
+    check() {
+      const qcInput = readJson(
+        "data/fixtures/taxable-account/on-taxable-foreign-dividend-tax-paid.json",
+      );
+      qcInput.household.primary.profile.provinceAtRetirement = "QC";
+      qcInput.household.primary.profile.pensionPlan = "QPP";
+
+      const result = simulateRetirementPlan(qcInput, rules);
+      const firstYear = result.years[0];
+
+      assert(
+        firstYear.provincialForeignTaxCredit > 0,
+        "Quebec household foreign-income scenario should surface a provincial foreign tax credit in annual results.",
+      );
+      assert(
+        firstYear.warnings.some((warning) =>
+          warning.includes("ON / BC / AB / QC provincial residual-credit support"),
+        ),
+        "Quebec household foreign-income scenario should surface the updated provincial foreign tax credit warning.",
       );
     },
   },
