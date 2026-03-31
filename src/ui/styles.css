@@ -121,7 +121,8 @@ select {
 
 .ghost-button,
 .primary-button,
-.preset-card {
+.preset-card,
+.step-button {
   transition:
     transform 140ms ease,
     box-shadow 140ms ease,
@@ -150,8 +151,70 @@ select {
 
 .primary-button:hover,
 .ghost-button:hover,
-.preset-card:hover {
+.preset-card:hover,
+.step-button:hover {
   transform: translateY(-1px);
+}
+
+.ghost-button:disabled,
+.primary-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.stepper {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0 22px;
+}
+
+.step-button {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid rgba(41, 69, 61, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.62);
+  cursor: pointer;
+  text-align: left;
+}
+
+.step-button-active {
+  border-color: rgba(23, 77, 63, 0.42);
+  background: linear-gradient(180deg, rgba(221, 237, 229, 0.92), rgba(255, 248, 235, 0.96));
+  box-shadow: 0 14px 26px rgba(24, 61, 51, 0.1);
+}
+
+.step-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: rgba(31, 95, 77, 0.1);
+  color: #1f5f4d;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.step-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.step-copy strong {
+  color: #17352f;
+  font-size: 0.96rem;
+}
+
+.step-copy small {
+  color: #5c716c;
+  line-height: 1.4;
 }
 
 .preset-grid {
@@ -307,8 +370,21 @@ select {
   gap: 16px;
 }
 
+.step-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.step-footer-actions {
+  display: flex;
+  gap: 10px;
+}
+
 .action-hint {
-  margin: 0;
+  margin: 12px 0 0;
   max-width: 34ch;
   color: #647772;
   line-height: 1.45;
@@ -384,6 +460,69 @@ select {
   color: #17352f;
 }
 
+.review-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.review-card {
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(41, 69, 61, 0.1);
+}
+
+.review-card span {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.8rem;
+  color: #5e6f69;
+}
+
+.review-card strong {
+  color: #17352f;
+}
+
+.saved-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.saved-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(41, 69, 61, 0.1);
+}
+
+.saved-card strong {
+  display: block;
+  color: #17352f;
+}
+
+.saved-card p {
+  margin: 6px 0 0;
+  color: #5c716c;
+  font-size: 0.86rem;
+}
+
+.saved-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ghost-button-danger {
+  color: #8f4531;
+  background: rgba(176, 92, 51, 0.08);
+}
+
 .compact-list {
   margin-top: 16px;
 }
@@ -407,6 +546,67 @@ select {
 
 .results-card-wide {
   grid-column: 1 / -1;
+}
+
+.chart-shell {
+  display: grid;
+  gap: 12px;
+}
+
+.chart-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.legend-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.76);
+  color: #24453e;
+  font-size: 0.82rem;
+}
+
+.legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+}
+
+.trend-chart {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.chart-axis {
+  stroke: rgba(44, 69, 62, 0.22);
+  stroke-width: 1;
+}
+
+.chart-footer,
+.chart-scale {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #5c716c;
+  font-size: 0.82rem;
+}
+
+.chart-empty {
+  margin: 0;
+  color: #5c716c;
 }
 
 .table-wrap {
@@ -464,8 +664,22 @@ thead th {
 
   .panel-header,
   .member-header,
-  .action-row {
+  .action-row,
+  .step-footer,
+  .saved-card,
+  .chart-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .saved-actions,
+  .step-footer-actions {
+    width: 100%;
+  }
+
+  .saved-actions .ghost-button,
+  .step-footer-actions .ghost-button,
+  .step-footer-actions .primary-button {
+    flex: 1;
   }
 }
