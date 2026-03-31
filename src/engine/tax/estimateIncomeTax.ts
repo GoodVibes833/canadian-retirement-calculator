@@ -44,6 +44,7 @@ export interface TaxEstimateResult {
   totalTax: number;
   marginalRate: number;
   federalForeignTaxCredit: number;
+  provincialForeignTaxCredit: number;
   warnings: string[];
 }
 
@@ -190,6 +191,14 @@ const PROVINCIAL_TAX_CONFIG_2026: Partial<Record<ProvinceCode, ProvincialTaxConf
 //   https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5010-d/5010-d-25e.txt
 // - Quebec dividend tax credit:
 //   https://www.revenuquebec.ca/en/citizens/income-tax-return/completing-your-income-tax-return/how-to-complete-your-income-tax-return/line-by-line-help/400-to-447-income-tax-and-contributions/line-415/
+// - Federal foreign tax credit guidance:
+//   https://www.canada.ca/en/revenue-agency/services/tax/individuals/topics/about-your-tax-return/tax-return/completing-a-tax-return/deductions-credits-expenses/line-40500-federal-foreign-tax-credit.html
+// - Ontario 2025 package, line 82 provincial foreign tax credit:
+//   https://www.canada.ca/en/revenue-agency/services/forms-publications/tax-packages-years/general-income-tax-benefit-package/ontario/5006-pc.html
+// - British Columbia 2025 package, line 71 provincial foreign tax credit:
+//   https://www.canada.ca/en/revenue-agency/services/forms-publications/tax-packages-years/general-income-tax-benefit-package/british-columbia/5010-pc.html
+// - Alberta 2025 package, line 69 provincial foreign tax credit:
+//   https://www.canada.ca/en/revenue-agency/services/forms-publications/tax-packages-years/general-income-tax-benefit-package/alberta/5009-pc.html
 
 export function estimateIncomeTax(
   input: TaxEstimateInput,
@@ -228,6 +237,7 @@ export function estimateIncomeTax(
     totalTax: internal.totalTax,
     marginalRate,
     federalForeignTaxCredit: internal.federalForeignTaxCredit,
+    provincialForeignTaxCredit: internal.provincialForeignTaxCredit,
     warnings,
   };
 }
@@ -286,10 +296,27 @@ function estimateIncomeTaxInternal(
   const provincialTaxResult = calculateProvincialTax(input);
   warnings.push(...provincialTaxResult.warnings);
 
+  const provincialForeignTaxCredit = calculateProvincialForeignTaxCredit(
+    input,
+    provincialTaxResult.provincialTaxBeforeForeignTaxCredit,
+    federalForeignTaxCredit,
+  );
+  const provincialTax = Math.max(
+    0,
+    provincialTaxResult.provincialTaxBeforeForeignTaxCredit -
+      provincialForeignTaxCredit,
+  );
+
   if ((input.foreignNonBusinessIncomeTaxPaid ?? 0) > 0) {
-    warnings.push(
-      "Foreign tax credit currently uses a federal-only, single-country approximation for foreign non-business income. Provincial foreign tax credits are not yet modeled.",
-    );
+    if (input.province === "QC") {
+      warnings.push(
+        "Foreign tax credit currently uses a baseline federal approximation, but Quebec provincial foreign tax credits are not yet modeled in the scaffold.",
+      );
+    } else {
+      warnings.push(
+        "Foreign tax credit currently uses a baseline federal approximation plus an ON / BC / AB provincial residual-credit approximation for foreign non-business income. Treaty-specific and multi-country detail are not yet modeled.",
+      );
+    }
   }
 
   if (
@@ -310,8 +337,9 @@ function estimateIncomeTaxInternal(
   return {
     federalTax,
     federalForeignTaxCredit,
-    provincialTax: provincialTaxResult.provincialTax,
-    totalTax: federalTax + provincialTaxResult.provincialTax,
+    provincialForeignTaxCredit,
+    provincialTax,
+    totalTax: federalTax + provincialTax,
     warnings,
   };
 }
@@ -344,12 +372,12 @@ function calculateFederalCredits(
 
 function calculateProvincialTax(
   input: TaxEstimateInput,
-): { provincialTax: number; warnings: string[] } {
+): { provincialTaxBeforeForeignTaxCredit: number; warnings: string[] } {
   const config = PROVINCIAL_TAX_CONFIG_2026[input.province];
 
   if (!config) {
     return {
-      provincialTax: 0,
+      provincialTaxBeforeForeignTaxCredit: 0,
       warnings: [
         `Province ${input.province} is not yet explicitly modeled in the tax scaffold. Federal tax only is being used.`,
       ],
@@ -382,7 +410,7 @@ function calculateProvincialTax(
   }
 
   return {
-    provincialTax: Math.max(0, provincialTax),
+    provincialTaxBeforeForeignTaxCredit: Math.max(0, provincialTax),
     warnings: [],
   };
 }
@@ -430,6 +458,38 @@ function calculateFederalForeignTaxCredit(
   const maximumCredit = federalTaxBeforeForeignTaxCredit * maximumIncomeShare;
 
   return Math.min(foreignTaxPaid, maximumCredit);
+}
+
+function calculateProvincialForeignTaxCredit(
+  input: TaxEstimateInput,
+  provincialTaxBeforeForeignTaxCredit: number,
+  federalForeignTaxCredit: number,
+): number {
+  // The CRA provincial package pages direct ON / BC / AB filers to Form T2036 when
+  // federal FTC on non-business income does not fully absorb the foreign tax paid.
+  // Until the exact T2036 worksheet math is table-driven here, use a bounded residual
+  // approximation: remaining foreign tax after federal FTC, capped by the province-tax
+  // share attributable to the modeled foreign non-business income.
+  const foreignIncome = Math.max(0, input.foreignNonBusinessIncome ?? 0);
+  const foreignTaxPaid = Math.max(0, input.foreignNonBusinessIncomeTaxPaid ?? 0);
+  const taxableIncome = Math.max(0, input.taxableIncome);
+
+  if (
+    input.province === "QC" ||
+    foreignIncome <= 0 ||
+    foreignTaxPaid <= 0 ||
+    taxableIncome <= 0 ||
+    provincialTaxBeforeForeignTaxCredit <= 0
+  ) {
+    return 0;
+  }
+
+  const foreignIncomeShare = Math.min(1, foreignIncome / taxableIncome);
+  const residualForeignTax = Math.max(0, foreignTaxPaid - federalForeignTaxCredit);
+  const maximumCredit =
+    provincialTaxBeforeForeignTaxCredit * foreignIncomeShare;
+
+  return Math.min(residualForeignTax, maximumCredit);
 }
 
 function resolveEligibleDividendTaxableAmount(

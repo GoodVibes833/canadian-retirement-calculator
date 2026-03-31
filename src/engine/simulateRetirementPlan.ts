@@ -645,6 +645,10 @@ function applyAnnualTaxableAccountDistributions(
     }
 
     const account = getAccountLedgerBySlot(balances, frame.slot);
+    const marketValueReduction = Math.min(
+      account.nonRegistered,
+      returnOfCapitalDistribution,
+    );
     const openingCostBase = account.nonRegisteredCostBase;
     const costBaseReduction = Math.min(
       openingCostBase,
@@ -655,6 +659,10 @@ function applyAnnualTaxableAccountDistributions(
       returnOfCapitalDistribution - openingCostBase,
     );
 
+    account.nonRegistered = Math.max(
+      0,
+      account.nonRegistered - marketValueReduction,
+    );
     account.nonRegisteredCostBase = Math.max(
       0,
       openingCostBase - costBaseReduction,
@@ -670,6 +678,22 @@ function applyAnnualTaxableAccountDistributions(
         ).toLowerCase()}'s non-registered adjusted cost base by ${roundCurrency(
           costBaseReduction,
         )}.`,
+      );
+    }
+
+    if (marketValueReduction > 0) {
+      warnings.push(
+        `Return of capital also reduced ${labelForSlot(
+          frame.slot,
+        ).toLowerCase()}'s modeled non-registered market value by ${roundCurrency(
+          marketValueReduction,
+        )}.`,
+      );
+    }
+
+    if (marketValueReduction < returnOfCapitalDistribution) {
+      warnings.push(
+        "Return-of-capital cash entered for the year exceeded the modeled opening non-registered market value. Review the account balance or distribution input for consistency.",
       );
     }
 
@@ -2470,13 +2494,13 @@ function buildYearWarnings(
 
     if ((frame.member.taxableAccountTaxProfile?.annualForeignDividendIncome ?? 0) > 0) {
       warnings.push(
-        "Foreign dividend income is being modeled as ordinary taxable investment income. Federal foreign tax credit support is now baseline-only, while provincial credits and withholding-tax recovery detail are not yet modeled.",
+        "Foreign dividend income is being modeled as ordinary taxable investment income. Federal foreign tax credit support is baseline-supported, and ON / BC / AB provincial foreign tax credit support is now approximated. Quebec, treaty-specific, and withholding-tax recovery detail are not yet modeled.",
       );
     }
 
     if ((frame.member.taxableAccountTaxProfile?.annualForeignNonBusinessIncomeTaxPaid ?? 0) > 0) {
       warnings.push(
-        "Foreign tax paid is modeled with a federal-only, single-country foreign tax credit approximation. Provincial foreign tax credits and treaty-specific details are not yet modeled.",
+        "Foreign tax paid is modeled with a baseline foreign tax credit approximation. ON / BC / AB provincial residual-credit support is now included, while Quebec, treaty-specific, and multi-country detail are not yet modeled.",
       );
     }
 
@@ -2484,7 +2508,7 @@ function buildYearWarnings(
       (frame.member.taxableAccountTaxProfile?.annualReturnOfCapitalDistribution ?? 0) > 0
     ) {
       warnings.push(
-        "Return of capital is modeled as a non-taxable cash distribution that reduces adjusted cost base. Make sure the same distribution is not also embedded in the portfolio return assumption.",
+        "Return of capital is modeled as a non-taxable cash distribution that reduces both adjusted cost base and modeled non-registered market value. Make sure the same distribution is not also embedded in the portfolio return assumption.",
       );
     }
   }
@@ -2526,7 +2550,7 @@ function buildAssumptionList(context: NormalizedContext): string[] {
     "OAS recovery tax is estimated with prior-year threshold mapping and capped by modeled OAS income.",
     "Drawdown currently supports a practical blended heuristic, not full optimization.",
     "Locked-in accounts now support baseline LIRA-to-LIF conversion, RRIF-style minimums, and jurisdiction-aware fallback maximums, with manual annual overrides preferred when available.",
-    "Non-registered withdrawals now track adjusted cost base, realize taxable capital gains, and carry forward net capital losses using the baseline Canadian inclusion rate, while explicit taxable-account interest, foreign dividends, Canadian eligible / non-eligible dividends, and return-of-capital cash distributions can be modeled annually. A baseline federal foreign tax credit approximation is now supported for foreign non-business income, while provincial credits, return-of-capital market-value effects, and carry-back or terminal-loss handling remain incomplete.",
+    "Non-registered withdrawals now track adjusted cost base, realize taxable capital gains, and carry forward net capital losses using the baseline Canadian inclusion rate, while explicit taxable-account interest, foreign dividends, Canadian eligible / non-eligible dividends, and return-of-capital cash distributions can be modeled annually. Return-of-capital distributions also reduce modeled non-registered market value. Baseline federal foreign tax credit support is now joined by ON / BC / AB provincial residual-credit support for foreign non-business income, while Quebec detail, treaty-specific cases, and carry-back or terminal-loss handling remain incomplete.",
     "Pension splitting currently uses an annual household heuristic on planned eligible pension income before discretionary registered drawdown.",
     "Immigrant and partial-benefit support is modeled through statement, manual, residence-year, and foreign-pension inputs.",
   ];

@@ -572,7 +572,7 @@ const taxChecks = [
   },
   {
     id: "T15",
-    label: "Return of capital reduces ACB and can trigger a deemed capital gain",
+    label: "Return of capital reduces ACB, market value, and can trigger a deemed capital gain",
     check() {
       const input = readJson(
         "data/fixtures/taxable-account/on-taxable-return-of-capital.json",
@@ -601,10 +601,20 @@ const taxChecks = [
         "Return of capital should reduce the taxable-account ACB to zero once exhausted.",
       );
       assert(
+        firstYear.endOfYearAccountBalances.primary.nonRegistered < 50000,
+        "Return of capital should also reduce the modeled non-registered market value, not just ACB.",
+      );
+      assert(
         firstYear.warnings.some((warning) =>
           warning.includes("deemed capital gain"),
         ),
         "Return-of-capital scenario should warn when ACB exhaustion creates a deemed capital gain.",
+      );
+      assert(
+        firstYear.warnings.some((warning) =>
+          warning.includes("modeled non-registered market value"),
+        ),
+        "Return-of-capital scenario should warn that the modeled taxable-account balance was reduced by the ROC cash distribution.",
       );
     },
   },
@@ -645,7 +655,7 @@ const taxChecks = [
   },
   {
     id: "T17",
-    label: "Federal foreign tax credit reduces tax on foreign non-business income",
+    label: "Federal and provincial foreign tax credits reduce tax on foreign non-business income",
     check() {
       const withoutCredit = estimateIncomeTax({
         taxableIncome: 70000,
@@ -672,10 +682,18 @@ const taxChecks = [
         "Foreign tax credit amount should be positive when eligible foreign tax is provided.",
       );
       assert(
+        withCredit.provincialForeignTaxCredit > 0,
+        "Ontario provincial foreign tax credit should also be positive when residual foreign tax remains after the federal credit.",
+      );
+      assert(
+        withCredit.provincialTax < withoutCredit.provincialTax,
+        "Provincial foreign tax credit should reduce the modeled provincial tax payable.",
+      );
+      assert(
         withCredit.warnings.some((warning) =>
-          warning.includes("federal-only, single-country approximation"),
+          warning.includes("ON / BC / AB provincial residual-credit approximation"),
         ),
-        "Foreign tax credit scenario should warn that only the baseline federal approximation is modeled.",
+        "Foreign tax credit scenario should warn that the provincial path is still a baseline approximation.",
       );
     },
   },
@@ -705,9 +723,9 @@ const taxChecks = [
       );
       assert(
         creditedYear.warnings.some((warning) =>
-          warning.includes("federal-only, single-country foreign tax credit approximation"),
+          warning.includes("ON / BC / AB provincial residual-credit support"),
         ),
-        "Credited foreign-dividend scenario should warn that the foreign tax credit is still baseline-only.",
+        "Credited foreign-dividend scenario should warn that the provincial foreign tax credit path is still baseline-only and partial.",
       );
     },
   },
