@@ -290,9 +290,11 @@
         "usesRrifMinimumRule": true,
         "fallbackLongTermRate": 0.06,
         "applySixPercentFloor": true,
+        "withdrawalFactorHigherRateYears": 15,
+        "withdrawalFactorLaterYearsRate": 0.06,
         "annuityCertainEndAge": 90,
         "notes": [
-          "Ontario LIF fallback maximum uses the official annuity-to-age-90 structure with a 6% floor.",
+          "Ontario LIF fallback maximum uses the official annuity-to-age-90 structure, with the greater of the published long-term rate and 6% for the first 15 years and 6% thereafter.",
           "Users should be allowed to override with the institution-calculated annual maximum when available."
         ]
       },
@@ -302,11 +304,14 @@
         "incomeAccountLabel": "LIF",
         "usesRrifMinimumRule": true,
         "fallbackLongTermRate": 0.0349,
-        "applySixPercentFloor": false,
+        "applySixPercentFloor": true,
+        "withdrawalFactorHigherRateYears": 15,
+        "withdrawalFactorLaterYearsRate": 0.06,
         "annuityCertainEndAge": 90,
         "notes": [
-          "BC LIF maximum depends on long-term rates and prior-year investment return.",
-          "The fallback path uses a federal-style annuity factor and should be overridden with the institution maximum when available."
+          "BC LIF maximum depends on the greater of prior-year investment return, the RRIF minimum, and a withdrawal-factor formula to age 90.",
+          "The withdrawal-factor formula uses the greater of the published November long-term bond rate and 6% for the first 15 years, then 6% for later years.",
+          "Users should still be allowed to override with the institution-calculated annual maximum when available."
         ]
       },
       "AB": {
@@ -316,10 +321,13 @@
         "usesRrifMinimumRule": true,
         "fallbackLongTermRate": 0.06,
         "applySixPercentFloor": true,
+        "withdrawalFactorHigherRateYears": 15,
+        "withdrawalFactorLaterYearsRate": 0.06,
         "annuityCertainEndAge": 90,
         "notes": [
-          "Alberta LIF maximum depends on legislation, age, and previous-year investment return.",
-          "The MVP path uses an Ontario-style annuity fallback and should be overridden when the institution maximum is known."
+          "Alberta LIF maximum depends on the greater of prior-year investment return, the RRIF minimum, and a withdrawal-factor formula to age 90.",
+          "The withdrawal-factor formula uses the greater of the published November long-term bond rate and 6% for the first 15 years, then 6% for later years.",
+          "Users should still be allowed to override with the institution-calculated annual maximum when available."
         ]
       },
       "QC": {

@@ -112,6 +112,8 @@ export interface LockedInJurisdictionRuleSet {
   temporaryIncomeEstimatedIncomeOffsetRate?: number;
   fallbackLongTermRate?: number;
   applySixPercentFloor?: boolean;
+  withdrawalFactorHigherRateYears?: number;
+  withdrawalFactorLaterYearsRate?: number;
   annuityCertainEndAge?: number;
   notes: string[];
 }

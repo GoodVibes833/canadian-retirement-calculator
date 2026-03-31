@@ -3606,12 +3606,18 @@ function inferLockedInMaximumWithdrawal(
     return openingLifBalance;
   }
 
-  const longTermRate = jurisdictionRule.applySixPercentFloor
-    ? Math.max(jurisdictionRule.fallbackLongTermRate, 0.06)
+  const laterPeriodRate =
+    jurisdictionRule.withdrawalFactorLaterYearsRate ??
+    (jurisdictionRule.applySixPercentFloor ? 0.06 : jurisdictionRule.fallbackLongTermRate);
+  const firstPeriodRate = jurisdictionRule.applySixPercentFloor
+    ? Math.max(jurisdictionRule.fallbackLongTermRate, laterPeriodRate)
     : jurisdictionRule.fallbackLongTermRate;
   const annuityPaymentFactor = calculateLifeIncomeFundMaximumFactor(
     age,
-    longTermRate,
+    firstPeriodRate,
+    jurisdictionRule.withdrawalFactorHigherRateYears ??
+      Math.max(0, jurisdictionRule.annuityCertainEndAge - age),
+    laterPeriodRate,
     jurisdictionRule.annuityCertainEndAge,
   );
   const annuityBasedMaximum = openingLifBalance * annuityPaymentFactor;
@@ -3639,7 +3645,9 @@ function estimateQuebecTemporaryIncomeOtherIncomeProxy(
 
 function calculateLifeIncomeFundMaximumFactor(
   age: number,
-  longTermRate: number,
+  firstPeriodRate: number,
+  firstPeriodYears: number,
+  laterPeriodRate: number,
   annuityCertainEndAge: number,
 ): number {
   if (age >= annuityCertainEndAge) {
@@ -3647,9 +3655,14 @@ function calculateLifeIncomeFundMaximumFactor(
   }
 
   let annuityDueFactor = 1;
+  let cumulativeDiscountFactor = 1;
+  const yearsRemaining = annuityCertainEndAge - age;
 
-  for (let year = 1; year <= annuityCertainEndAge - age; year += 1) {
-    annuityDueFactor += 1 / Math.pow(1 + longTermRate, year);
+  for (let year = 1; year <= yearsRemaining; year += 1) {
+    const annualDiscountRate =
+      year <= firstPeriodYears ? firstPeriodRate : laterPeriodRate;
+    cumulativeDiscountFactor *= 1 + annualDiscountRate;
+    annuityDueFactor += 1 / cumulativeDiscountFactor;
   }
 
   return 1 / annuityDueFactor;

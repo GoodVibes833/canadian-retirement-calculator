@@ -1724,6 +1724,77 @@ const taxChecks = [
       );
     },
   },
+  {
+    id: "T50",
+    label: "BC 2026 LIF fallback uses the same 6% floor structure as Alberta under published rates below 6%",
+    check() {
+      const bcInput = readJson("data/fixtures/locked-in/bc-lif-fallback.json");
+      const abInput = readJson("data/fixtures/locked-in/ab-lif-fallback.json");
+      bcInput.household.expenseProfile.desiredAfterTaxSpending = 100000;
+      abInput.household.expenseProfile.desiredAfterTaxSpending = 100000;
+
+      const bcResult = simulateRetirementPlan(bcInput, rules);
+      const abResult = simulateRetirementPlan(abInput, rules);
+      const bcYear = bcResult.years[0];
+      const abYear = abResult.years[0];
+
+      assert(
+        Math.abs(bcYear.lifWithdrawals - abYear.lifWithdrawals) < 0.01,
+        "BC and Alberta fallback LIF maximums should align under 2026 published rates because both apply the 6% floor structure.",
+      );
+    },
+  },
+  {
+    id: "T51",
+    label: "Higher-than-6% long-term rates only apply to the first 15 years of the LIF annuity factor",
+    check() {
+      const input = readJson("data/fixtures/locked-in/ab-lif-fallback.json");
+      input.household.primary.profile.currentAge = 60;
+      input.household.primary.profile.retirementAge = 60;
+      input.household.primary.profile.provinceAtRetirement = "ON";
+      input.household.primary.lockedInAccountPolicy.jurisdiction = "ON";
+      input.household.expenseProfile.desiredAfterTaxSpending = 100000;
+      input.household.maxProjectionAge = 60;
+
+      const customRules = JSON.parse(JSON.stringify(rules));
+      customRules.lockedIn.jurisdictions.ON.fallbackLongTermRate = 0.08;
+      customRules.lockedIn.jurisdictions.ON.applySixPercentFloor = true;
+      customRules.lockedIn.jurisdictions.ON.withdrawalFactorHigherRateYears = 15;
+      customRules.lockedIn.jurisdictions.ON.withdrawalFactorLaterYearsRate = 0.06;
+
+      const result = simulateRetirementPlan(input, customRules);
+      const firstYear = result.years[0];
+      const expectedPiecewiseMaximum = calculateExpectedLifMaximum({
+        openingLifBalance: input.household.primary.accounts.lif,
+        age: 60,
+        firstPeriodRate: 0.08,
+        firstPeriodYears: 15,
+        laterPeriodRate: 0.06,
+        annuityCertainEndAge: 90,
+        assumedPreviousYearReturnRate:
+          input.household.postRetirementReturnRate - input.household.annualFeeRate,
+      });
+      const flatEightPercentMaximum = calculateExpectedLifMaximum({
+        openingLifBalance: input.household.primary.accounts.lif,
+        age: 60,
+        firstPeriodRate: 0.08,
+        firstPeriodYears: 30,
+        laterPeriodRate: 0.08,
+        annuityCertainEndAge: 90,
+        assumedPreviousYearReturnRate:
+          input.household.postRetirementReturnRate - input.household.annualFeeRate,
+      });
+
+      assert(
+        Math.abs(firstYear.lifWithdrawals - expectedPiecewiseMaximum) < 0.01,
+        "Piecewise 15-year-higher-rate LIF formula should match the simulated Ontario fallback maximum.",
+      );
+      assert(
+        firstYear.lifWithdrawals < flatEightPercentMaximum - 10,
+        "Later years should revert to 6%, so the piecewise maximum should stay below a flat 8% age-90 formula.",
+      );
+    },
+  },
 ];
 
 for (const check of taxChecks) {
@@ -1756,4 +1827,54 @@ function byPrimaryAge(result, age) {
   assert(year, `Expected projection year for primary age ${age}.`);
 
   return year;
+}
+
+function calculateExpectedLifMaximum({
+  openingLifBalance,
+  age,
+  firstPeriodRate,
+  firstPeriodYears,
+  laterPeriodRate,
+  annuityCertainEndAge,
+  assumedPreviousYearReturnRate,
+}) {
+  const annuityFactor = calculateExpectedLifAnnuityFactor({
+    age,
+    firstPeriodRate,
+    firstPeriodYears,
+    laterPeriodRate,
+    annuityCertainEndAge,
+  });
+  const annuityBasedMaximum = openingLifBalance * annuityFactor;
+  const investmentReturnMaximum =
+    openingLifBalance * Math.max(0, assumedPreviousYearReturnRate);
+
+  return Math.min(
+    openingLifBalance,
+    Math.max(annuityBasedMaximum, investmentReturnMaximum),
+  );
+}
+
+function calculateExpectedLifAnnuityFactor({
+  age,
+  firstPeriodRate,
+  firstPeriodYears,
+  laterPeriodRate,
+  annuityCertainEndAge,
+}) {
+  if (age >= annuityCertainEndAge) {
+    return 1;
+  }
+
+  let annuityDueFactor = 1;
+  let cumulativeDiscountFactor = 1;
+
+  for (let year = 1; year <= annuityCertainEndAge - age; year += 1) {
+    const annualDiscountRate =
+      year <= firstPeriodYears ? firstPeriodRate : laterPeriodRate;
+    cumulativeDiscountFactor *= 1 + annualDiscountRate;
+    annuityDueFactor += 1 / cumulativeDiscountFactor;
+  }
+
+  return 1 / annuityDueFactor;
 }
