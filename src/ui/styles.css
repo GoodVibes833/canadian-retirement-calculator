@@ -434,6 +434,29 @@ select {
   font-size: 0.84rem;
 }
 
+.report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.report-summary-card {
+  margin-top: 18px;
+}
+
+.report-summary {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.report-summary p {
+  margin: 0;
+  line-height: 1.65;
+  color: #364944;
+}
+
 .mini-stats {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -740,6 +763,10 @@ select {
   margin-top: 14px;
 }
 
+.no-print {
+  display: block;
+}
+
 .table-wrap {
   overflow-x: auto;
   margin-top: 14px;
@@ -783,6 +810,17 @@ thead th {
     padding: 16px;
   }
 
+  .panel,
+  .hero-panel {
+    padding: 18px;
+    border-radius: 20px;
+  }
+
+  .hero-panel h1 {
+    max-width: 100%;
+    font-size: clamp(2rem, 10vw, 3.2rem);
+  }
+
   .hero-metrics,
   .summary-grid,
   .form-section,
@@ -810,7 +848,97 @@ thead th {
 
   .saved-actions .ghost-button,
   .step-footer-actions .ghost-button,
-  .step-footer-actions .primary-button {
+  .step-footer-actions .primary-button,
+  .report-actions .ghost-button {
     flex: 1;
+  }
+
+  .report-actions,
+  .range-pills {
+    width: 100%;
+  }
+
+  .report-actions .ghost-button,
+  .range-pill {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 520px) {
+  .app-shell {
+    padding: 12px;
+  }
+
+  .metric-card {
+    padding: 14px;
+  }
+
+  .metric-card strong {
+    font-size: 1.15rem;
+  }
+
+  .review-grid,
+  .validation-summary {
+    grid-template-columns: 1fr;
+  }
+
+  table {
+    min-width: 680px;
+  }
+}
+
+@media print {
+  :root {
+    background: #fff;
+    color: #111;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  .app-shell {
+    padding: 0;
+  }
+
+  .hero-panel,
+  .input-panel,
+  .no-print {
+    display: none !important;
+  }
+
+  .workspace-grid {
+    display: block;
+  }
+
+  .panel,
+  .results-card,
+  .metric-card,
+  .review-card {
+    background: #fff;
+    box-shadow: none;
+    backdrop-filter: none;
+    border-color: rgba(0, 0, 0, 0.12);
+    break-inside: avoid;
+  }
+
+  .results-panel {
+    border: 0;
+    padding: 0;
+  }
+
+  .results-grid,
+  .summary-grid,
+  .review-grid {
+    break-inside: avoid;
+  }
+
+  .trend-chart {
+    max-height: 220px;
+  }
+
+  .table-wrap {
+    overflow: visible;
   }
 }

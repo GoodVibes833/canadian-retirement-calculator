@@ -46,6 +46,10 @@ type EditableScenario = {
   title: string;
   householdType: HouseholdType;
   province: ProvinceCode;
+  inflationRatePercent: number;
+  preRetirementReturnRatePercent: number;
+  postRetirementReturnRatePercent: number;
+  annualFeeRatePercent: number;
   withdrawalOrder: WithdrawalOrder;
   pensionIncomeSplittingEnabled: boolean;
   oasClawbackAwareMode: boolean;
@@ -75,6 +79,11 @@ type ValidationIssue = {
 };
 
 type TransferStatus = {
+  tone: "success" | "error";
+  message: string;
+};
+
+type ReportStatus = {
   tone: "success" | "error";
   message: string;
 };
@@ -160,6 +169,7 @@ export function App() {
   );
   const [lastLoadedSavedId, setLastLoadedSavedId] = useState<string | null>(null);
   const [transferStatus, setTransferStatus] = useState<TransferStatus | null>(null);
+  const [reportStatus, setReportStatus] = useState<ReportStatus | null>(null);
   const [chartRange, setChartRange] = useState<ChartRange>(18);
   const [focusedYearIndex, setFocusedYearIndex] = useState(0);
 
@@ -274,6 +284,12 @@ export function App() {
         } before running the engine.`
       : "Runs the existing 2026 Canada rules snapshot and the same pure engine already passing the Golden regression set.";
   const focusFacts = focusedYear ? buildFocusedYearFacts(focusedYear) : [];
+  const reportSummary = buildReportSummary(
+    scenario,
+    runState.result,
+    firstYear,
+    comparisonState,
+  );
 
   const refreshComparisonState = (
     nextSelectedPreset: UiPreset,
@@ -297,6 +313,7 @@ export function App() {
     setFocusedYearIndex(0);
     setLastLoadedSavedId(null);
     setTransferStatus(null);
+    setReportStatus(null);
     setComparisonState(
       buildComparisonState(
         comparisonMode,
@@ -315,6 +332,7 @@ export function App() {
     setFocusedYearIndex(0);
     setLastLoadedSavedId(null);
     setTransferStatus(null);
+    setReportStatus(null);
     refreshComparisonState(selectedPreset);
   };
 
@@ -333,6 +351,7 @@ export function App() {
     setFocusedYearIndex(0);
     refreshComparisonState(selectedPreset);
     setTransferStatus(null);
+    setReportStatus(null);
   };
 
   const handleSaveScenario = () => {
@@ -372,6 +391,7 @@ export function App() {
       tone: "success",
       message: `Loaded saved scenario "${savedScenario.label}".`,
     });
+    setReportStatus(null);
     refreshComparisonState(preset);
     setActiveStep("review");
   };
@@ -433,6 +453,58 @@ export function App() {
     importInputRef.current?.click();
   };
 
+  const handlePrintReport = () => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.print();
+    setReportStatus({
+      tone: "success",
+      message: "Opened the browser print flow for the current report view.",
+    });
+  };
+
+  const handleCopySummary = async () => {
+    const text = buildShareSummary(
+      scenario,
+      runState.result,
+      comparisonState,
+      reportSummary,
+    );
+
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        await navigator.clipboard.writeText(text);
+      } else if (typeof document !== "undefined") {
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.setAttribute("readonly", "true");
+        textarea.style.position = "absolute";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      } else {
+        throw new Error("Clipboard is not available in this environment.");
+      }
+
+      setReportStatus({
+        tone: "success",
+        message: "Copied a shareable retirement summary to the clipboard.",
+      });
+    } catch (error) {
+      setReportStatus({
+        tone: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Could not copy the summary to the clipboard.",
+      });
+    }
+  };
+
   const handleImportFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -463,6 +535,7 @@ export function App() {
         tone: "success",
         message: `Imported scenario "${normalizedScenario.title}".`,
       });
+      setReportStatus(null);
       refreshComparisonState(preset);
       setActiveStep("review");
     } catch (error) {
@@ -868,6 +941,90 @@ export function App() {
                   </label>
                 </div>
               </section>
+
+              <section className="member-card">
+                <div className="member-header">
+                  <h3>Economic Assumptions</h3>
+                </div>
+                <p className="section-note">
+                  These assumptions shape growth, erosion from fees, and the
+                  spending pressure created by inflation.
+                </p>
+                <div className="form-section">
+                  <label>
+                    <FieldLabel
+                      label="Inflation Rate (%)"
+                      hint="Annual inflation assumption used to grow retirement spending and indexed cash flows."
+                    />
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={scenario.inflationRatePercent}
+                      onChange={(event) =>
+                        setScenario((current) => ({
+                          ...current,
+                          inflationRatePercent: readNumber(event.target.value),
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    <FieldLabel
+                      label="Pre-Retirement Return (%)"
+                      hint="Average annual return assumption before retirement begins."
+                    />
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={scenario.preRetirementReturnRatePercent}
+                      onChange={(event) =>
+                        setScenario((current) => ({
+                          ...current,
+                          preRetirementReturnRatePercent: readNumber(
+                            event.target.value,
+                          ),
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    <FieldLabel
+                      label="Post-Retirement Return (%)"
+                      hint="Average annual return assumption after retirement starts."
+                    />
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={scenario.postRetirementReturnRatePercent}
+                      onChange={(event) =>
+                        setScenario((current) => ({
+                          ...current,
+                          postRetirementReturnRatePercent: readNumber(
+                            event.target.value,
+                          ),
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    <FieldLabel
+                      label="Annual Fee Drag (%)"
+                      hint="Portfolio fee or drag assumption applied inside the engine."
+                    />
+                    <input
+                      type="number"
+                      step="0.05"
+                      value={scenario.annualFeeRatePercent}
+                      onChange={(event) =>
+                        setScenario((current) => ({
+                          ...current,
+                          annualFeeRatePercent: readNumber(event.target.value),
+                        }))
+                      }
+                    />
+                  </label>
+                </div>
+              </section>
             </>
           ) : null}
 
@@ -1069,6 +1226,34 @@ export function App() {
             <span className="result-badge">{selectedPreset.label}</span>
           </div>
 
+          <div className="report-actions no-print">
+            <button
+              className="ghost-button"
+              type="button"
+              onClick={handlePrintReport}
+            >
+              Print Report
+            </button>
+            <button
+              className="ghost-button"
+              type="button"
+              onClick={() => void handleCopySummary()}
+            >
+              Copy Summary
+            </button>
+          </div>
+          {reportStatus ? (
+            <p
+              className={
+                reportStatus.tone === "success"
+                  ? "status-banner status-banner-success no-print"
+                  : "status-banner status-banner-error no-print"
+              }
+            >
+              {reportStatus.message}
+            </p>
+          ) : null}
+
           <div className="summary-grid">
             <Metric
               label="First-Year After-Tax Income"
@@ -1099,6 +1284,20 @@ export function App() {
               )}
             />
           </div>
+
+          <section className="results-card results-card-wide report-summary-card">
+            <div className="panel-header">
+              <div>
+                <p className="section-kicker">Report</p>
+                <h3>Advisor-Friendly Summary</h3>
+              </div>
+            </div>
+            <div className="report-summary">
+              {reportSummary.map((paragraph) => (
+                <p key={paragraph}>{paragraph}</p>
+              ))}
+            </div>
+          </section>
 
           <div className="results-grid">
             <section className="results-card results-card-wide">
@@ -1946,6 +2145,14 @@ function createEditableScenario(preset: UiPreset): EditableScenario {
     title: preset.label,
     householdType: household.householdType,
     province: household.primary.profile.provinceAtRetirement,
+    inflationRatePercent: toPercentValue(household.inflationRate),
+    preRetirementReturnRatePercent: toPercentValue(
+      household.preRetirementReturnRate,
+    ),
+    postRetirementReturnRatePercent: toPercentValue(
+      household.postRetirementReturnRate,
+    ),
+    annualFeeRatePercent: toPercentValue(household.annualFeeRate ?? 0),
     withdrawalOrder: household.withdrawalOrder,
     pensionIncomeSplittingEnabled: household.pensionIncomeSplittingEnabled,
     oasClawbackAwareMode: household.oasClawbackAwareMode,
@@ -2017,6 +2224,16 @@ function buildInputFromScenario(
   const nextInput = deepClone(baseInput);
 
   nextInput.household.householdType = scenario.householdType;
+  nextInput.household.inflationRate = fromPercentValue(scenario.inflationRatePercent);
+  nextInput.household.preRetirementReturnRate = fromPercentValue(
+    scenario.preRetirementReturnRatePercent,
+  );
+  nextInput.household.postRetirementReturnRate = fromPercentValue(
+    scenario.postRetirementReturnRatePercent,
+  );
+  nextInput.household.annualFeeRate = fromPercentValue(
+    scenario.annualFeeRatePercent,
+  );
   nextInput.household.withdrawalOrder = scenario.withdrawalOrder;
   nextInput.household.pensionIncomeSplittingEnabled =
     scenario.pensionIncomeSplittingEnabled;
@@ -2246,6 +2463,14 @@ function buildReviewFacts(
     { label: "Province", value: scenario.province },
     { label: "Household", value: scenario.householdType },
     {
+      label: "Inflation",
+      value: formatDisplayPercent(scenario.inflationRatePercent),
+    },
+    {
+      label: "Post-Ret Return",
+      value: formatDisplayPercent(scenario.postRetirementReturnRatePercent),
+    },
+    {
       label: "Target Spending",
       value: formatCurrency(scenario.desiredAfterTaxSpending),
     },
@@ -2292,6 +2517,78 @@ function buildOutcomeNarrative(
       : "The engine did not surface a major first-pass warning in the current scenario.";
 
   return [readinessLine, gapLine, benefitsLine, warningLine];
+}
+
+function buildReportSummary(
+  scenario: EditableScenario,
+  result: SimulationResult,
+  firstYear: ProjectionYear | undefined,
+  comparisonState: ComparisonState | null,
+): string[] {
+  const firstShortfallText = result.summary.firstShortfallYear
+    ? `The first modeled shortfall appears in ${result.summary.firstShortfallYear}.`
+    : "The current run does not show a shortfall in the modeled horizon.";
+  const firstYearLine = firstYear
+    ? `In the first projection year, the household brings in ${formatCurrency(
+        firstYear.afterTaxIncome,
+      )} after tax against ${formatCurrency(firstYear.spending)} of spending, with ${formatCurrency(
+        firstYear.taxes,
+      )} of tax drag and ${formatCurrency(
+        firstYear.cppQppIncome +
+          firstYear.oasIncome +
+          firstYear.gisIncome +
+          firstYear.allowanceIncome +
+          firstYear.allowanceSurvivorIncome,
+      )} coming from public programs.`
+    : "A first-year projection row is not available yet for narrative reporting.";
+  const estateLine = `The current after-tax estate estimate is ${formatCurrency(
+    result.summary.estimatedAfterTaxEstateValue ?? 0,
+  )}, with terminal tax estimated at ${formatCurrency(
+    result.summary.estimatedTerminalTaxLiability ?? 0,
+  )}.`;
+  const assumptionsLine = `This scenario currently assumes ${formatDisplayPercent(
+    scenario.inflationRatePercent,
+  )} inflation, ${formatDisplayPercent(
+    scenario.preRetirementReturnRatePercent,
+  )} pre-retirement returns, ${formatDisplayPercent(
+    scenario.postRetirementReturnRatePercent,
+  )} post-retirement returns, and ${formatDisplayPercent(
+    scenario.annualFeeRatePercent,
+  )} annual fee drag.`;
+  const comparisonLine = comparisonState
+    ? buildComparisonNarrative(result, comparisonState.runState.result)[0]
+    : "No comparison baseline is active, so this summary reflects only the current scenario.";
+
+  return [
+    `${scenario.title} is currently assessed as ${result.summary.initialReadiness}. ${firstShortfallText}`,
+    firstYearLine,
+    estateLine,
+    assumptionsLine,
+    comparisonLine,
+  ];
+}
+
+function buildShareSummary(
+  scenario: EditableScenario,
+  result: SimulationResult,
+  comparisonState: ComparisonState | null,
+  reportSummary: string[],
+): string {
+  const lines = [
+    `Retirement Summary: ${scenario.title}`,
+    `Province: ${scenario.province}`,
+    `Household: ${scenario.householdType}`,
+    `Readiness: ${result.summary.initialReadiness}`,
+    `First shortfall: ${result.summary.firstShortfallYear ?? "None"}`,
+    `After-tax estate: ${formatCurrency(
+      result.summary.estimatedAfterTaxEstateValue ?? 0,
+    )}`,
+    comparisonState ? `Compare baseline: ${comparisonState.label}` : null,
+    "",
+    ...reportSummary,
+  ];
+
+  return lines.filter(Boolean).join("\n");
 }
 
 function buildComparisonNarrative(
@@ -2371,6 +2668,43 @@ function validateScenario(
       message: "Desired after-tax spending needs to be greater than zero.",
     });
   }
+
+  issues.push(
+    ...validatePercentScenarioValue(
+      "Inflation rate",
+      scenario.inflationRatePercent,
+      0,
+      10,
+      6,
+    ),
+  );
+  issues.push(
+    ...validatePercentScenarioValue(
+      "Pre-retirement return",
+      scenario.preRetirementReturnRatePercent,
+      -10,
+      20,
+      12,
+    ),
+  );
+  issues.push(
+    ...validatePercentScenarioValue(
+      "Post-retirement return",
+      scenario.postRetirementReturnRatePercent,
+      -10,
+      20,
+      10,
+    ),
+  );
+  issues.push(
+    ...validatePercentScenarioValue(
+      "Annual fee drag",
+      scenario.annualFeeRatePercent,
+      0,
+      5,
+      2,
+    ),
+  );
 
   if (scenario.householdType !== "single" && !partnerScenario) {
     issues.push({
@@ -2516,6 +2850,36 @@ function validateMember(
   return issues;
 }
 
+function validatePercentScenarioValue(
+  label: string,
+  value: number,
+  minimum: number,
+  maximum: number,
+  warningThreshold: number,
+): ValidationIssue[] {
+  if (value < minimum || value > maximum) {
+    return [
+      {
+        level: "error",
+        message: `${label} must stay between ${minimum}% and ${maximum}%.`,
+      },
+    ];
+  }
+
+  if (Math.abs(value) > warningThreshold) {
+    return [
+      {
+        level: "warning",
+        message: `${label} is set to ${formatDisplayPercent(
+          value,
+        )}, which is outside a typical planning range.`,
+      },
+    ];
+  }
+
+  return [];
+}
+
 function parseScenarioTransferEnvelope(raw: string): ScenarioTransferEnvelope {
   const parsed = JSON.parse(raw) as Partial<ScenarioTransferEnvelope>;
 
@@ -2556,6 +2920,22 @@ function normalizeImportedScenario(
         : fallback.title,
     householdType: nextHouseholdType,
     province: nextProvince,
+    inflationRatePercent: safeNumber(
+      scenario.inflationRatePercent,
+      fallback.inflationRatePercent,
+    ),
+    preRetirementReturnRatePercent: safeNumber(
+      scenario.preRetirementReturnRatePercent,
+      fallback.preRetirementReturnRatePercent,
+    ),
+    postRetirementReturnRatePercent: safeNumber(
+      scenario.postRetirementReturnRatePercent,
+      fallback.postRetirementReturnRatePercent,
+    ),
+    annualFeeRatePercent: safeNumber(
+      scenario.annualFeeRatePercent,
+      fallback.annualFeeRatePercent,
+    ),
     withdrawalOrder: withdrawalOrderOptions.some(
       (option) => option.value === scenario.withdrawalOrder,
     )
@@ -2694,6 +3074,18 @@ function safeDivide(numerator: number, denominator: number): number {
   }
 
   return numerator / denominator;
+}
+
+function toPercentValue(decimalRate: number): number {
+  return Number((decimalRate * 100).toFixed(2));
+}
+
+function fromPercentValue(percentRate: number): number {
+  return percentRate / 100;
+}
+
+function formatDisplayPercent(value: number): string {
+  return `${value.toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1")}%`;
 }
 
 function formatPercent(value: number): string {
