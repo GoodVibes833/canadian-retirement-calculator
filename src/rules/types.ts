@@ -26,6 +26,10 @@ export interface CppRuleSet {
 
 export interface QppRuleSet {
   startAge: AgeBound;
+  reductionPerMonthBefore65Min: number;
+  reductionPerMonthBefore65Max: number;
+  increasePerMonthAfter65: number;
+  maxMonthlyRetirementAt65: number;
   notes: string[];
 }
 

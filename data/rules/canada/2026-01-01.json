@@ -110,9 +110,14 @@
       "min": 60,
       "max": 72
     },
+    "reductionPerMonthBefore65Min": 0.005,
+    "reductionPerMonthBefore65Max": 0.006,
+    "increasePerMonthAfter65": 0.007,
+    "maxMonthlyRetirementAt65": 1508,
     "notes": [
       "QPP start and delayed-retirement rules differ from CPP and must be modeled separately.",
-      "Delayed retirement increases can continue to age 72."
+      "Delayed retirement increases can continue to age 72.",
+      "For start ages before 65, the monthly reduction factor ranges from 0.5% to 0.6% depending on the pension's proportion of the maximum at age 65."
     ]
   },
   "oas": {

@@ -175,7 +175,7 @@ Must-pass expectations:
 Known limitations to tolerate for now:
 
 - precise Quebec tax implementation,
-- full QPP delayed-start math beyond manual override support.
+- more exact early-start QPP reduction handling beyond the current set-proportion approximation.
 
 ### G09: BC Immigrant Partial OAS
 

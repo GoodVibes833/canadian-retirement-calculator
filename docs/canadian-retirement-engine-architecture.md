@@ -165,14 +165,14 @@ The scaffold is intentionally incomplete in these areas:
 - pension splitting now uses an annual heuristic on planned eligible pension income before discretionary drawdown, not a full lifetime optimization,
 - spouse-aware survivor logic now includes a baseline spousal asset rollover and defined-benefit survivor continuation, but still omits CPP survivor pension and estate-tax effects,
 - custom withdrawal order now supports supported account tokens and then falls back to the blended default path,
-- QPP delayed-start math still needs Quebec-specific implementation beyond manual-input support.
+- QPP delayed-start increases are now baseline-supported through age 72, while early-start reductions still use a set-proportion approximation unless the user enters a manual start-age amount.
 
 ## 8. Next Implementation Order
 
 Recommended order from here:
 
 1. Replace locked-in fallback maximums with more exact institution-style annual calculations and fuller Alberta / BC formulas.
-2. Deepen Quebec-specific QPP, FRV, and tax-path behavior, including Quebec-side foreign tax credit detail.
+2. Deepen Quebec-specific FRV and tax-path behavior, including Quebec-side foreign tax credit detail and more exact early-start QPP reduction handling.
 3. Add GIS and Allowance.
 4. Add fuller survivor modeling including CPP survivor pension and death-year tax handling.
 5. Add more exact multi-country and treaty-aware foreign tax credit handling.

@@ -777,6 +777,29 @@ const taxChecks = [
       );
     },
   },
+  {
+    id: "T20",
+    label: "Delayed QPP at age 72 applies the official 0.7% monthly increase path",
+    check() {
+      const input = readJson("data/fixtures/quebec/qc-qpp-delayed-start.json");
+      const result = simulateRetirementPlan(input, rules);
+      const age71 = byPrimaryAge(result, 71);
+      const age72 = byPrimaryAge(result, 72);
+
+      assert(
+        age71.cppQppIncome === 0,
+        "QPP should remain zero before the elected Quebec start age of 72.",
+      );
+      assert(
+        Math.abs(age72.cppQppIncome - 19056) < 0.01,
+        "Delayed QPP should apply the official 0.7% monthly increase from age 65 through age 72.",
+      );
+      assert(
+        !age72.warnings.some((warning) => warning.includes("QPP early-start reductions")),
+        "A delayed-start QPP case should not surface the early-start approximation warning.",
+      );
+    },
+  },
 ];
 
 for (const check of taxChecks) {

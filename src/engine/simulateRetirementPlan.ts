@@ -2206,7 +2206,13 @@ function resolveCppOrQppAnnualIncome(
   }
 
   if (member.profile.pensionPlan === "QPP") {
-    return monthlyAmountAt65 * 12;
+    return (
+      applyQppStartAgeAdjustment(
+        monthlyAmountAt65,
+        member.publicBenefits.pensionStartAge,
+        context.rules,
+      ) * 12
+    );
   }
 
   const adjustedMonthlyAmount = applyCppStartAgeAdjustment(
@@ -2230,12 +2236,59 @@ function resolveMonthlyBenefitAt65(
 
   if (benefits.entitlementPercentOfMaximum !== undefined) {
     return (
-      context.rules.cpp.maxMonthlyRetirementAt65 *
+      (member.profile.pensionPlan === "QPP"
+        ? context.rules.qpp.maxMonthlyRetirementAt65
+        : context.rules.cpp.maxMonthlyRetirementAt65) *
       benefits.entitlementPercentOfMaximum
     );
   }
 
   return 0;
+}
+
+function applyQppStartAgeAdjustment(
+  monthlyAmountAt65: number,
+  pensionStartAge: number,
+  rules: CanadaRuleSet,
+): number {
+  const monthsFrom65 = Math.round((pensionStartAge - 65) * 12);
+
+  if (monthsFrom65 < 0) {
+    const reductionRatePerMonth = resolveQppReductionPerMonth(
+      monthlyAmountAt65,
+      rules,
+    );
+
+    return monthlyAmountAt65 * (1 - Math.abs(monthsFrom65) * reductionRatePerMonth);
+  }
+
+  if (monthsFrom65 > 0) {
+    const delayedMonths = Math.min(monthsFrom65, (72 - 65) * 12);
+
+    return monthlyAmountAt65 * (1 + delayedMonths * rules.qpp.increasePerMonthAfter65);
+  }
+
+  return monthlyAmountAt65;
+}
+
+function resolveQppReductionPerMonth(
+  monthlyAmountAt65: number,
+  rules: CanadaRuleSet,
+): number {
+  const maxMonthlyAmount = Math.max(0, rules.qpp.maxMonthlyRetirementAt65);
+
+  if (maxMonthlyAmount <= 0) {
+    return rules.qpp.reductionPerMonthBefore65Max;
+  }
+
+  const proportionOfMaximum = clampRate(monthlyAmountAt65 / maxMonthlyAmount);
+
+  return (
+    rules.qpp.reductionPerMonthBefore65Min +
+    (rules.qpp.reductionPerMonthBefore65Max -
+      rules.qpp.reductionPerMonthBefore65Min) *
+      proportionOfMaximum
+  );
 }
 
 function applyCppStartAgeAdjustment(
@@ -2446,10 +2499,10 @@ function buildYearWarnings(
     if (
       frame.member.profile.pensionPlan === "QPP" &&
       benefits.cppQppEstimateMode !== "manual-at-start-age" &&
-      benefits.pensionStartAge !== 65
+      benefits.pensionStartAge < 65
     ) {
       warnings.push(
-        "QPP start-age adjustments need Quebec-specific rules or a manual amount at the chosen start age.",
+        "QPP early-start reductions are modeled with a baseline set-proportion interpolation between the official 0.5% and 0.6% monthly factors. Use a manual amount at the chosen start age when you have a Retraite Quebec estimate.",
       );
     }
 
@@ -2567,6 +2620,7 @@ function buildAssumptionList(context: NormalizedContext): string[] {
     "Locked-in accounts now support baseline LIRA-to-LIF conversion, RRIF-style minimums, and jurisdiction-aware fallback maximums, with manual annual overrides preferred when available.",
     "Non-registered withdrawals now track adjusted cost base, realize taxable capital gains, and carry forward net capital losses using the baseline Canadian inclusion rate, while explicit taxable-account interest, foreign dividends, Canadian eligible / non-eligible dividends, and return-of-capital cash distributions can be modeled annually. Return-of-capital distributions also reduce modeled non-registered market value. Baseline federal foreign tax credit support is now joined by ON / BC / AB provincial residual-credit support for foreign non-business income, while Quebec detail, treaty-specific cases, and carry-back or terminal-loss handling remain incomplete.",
     "Pension splitting currently uses an annual household heuristic on planned eligible pension income before discretionary registered drawdown.",
+    "QPP delayed-start increases are now baseline-supported through age 72, while early-start QPP reductions use a set-proportion approximation unless a manual start-age amount is provided.",
     "Immigrant and partial-benefit support is modeled through statement, manual, residence-year, and foreign-pension inputs.",
   ];
 }
