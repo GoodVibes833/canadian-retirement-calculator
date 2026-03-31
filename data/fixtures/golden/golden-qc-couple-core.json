@@ -1,0 +1,116 @@
+{
+  "household": {
+    "householdType": "married",
+    "primary": {
+      "profile": {
+        "id": "primary",
+        "currentAge": 57,
+        "sex": "male",
+        "retirementAge": 62,
+        "lifeExpectancy": 91,
+        "provinceAtRetirement": "QC",
+        "pensionPlan": "QPP",
+        "yearsResidedInCanadaAfter18": 39
+      },
+      "employment": {
+        "baseAnnualIncome": 102000,
+        "annualGrowthRate": 0.025,
+        "partTimeIncomeAfterRetirement": []
+      },
+      "publicBenefits": {
+        "cppQppEstimateMode": "manual-at-start-age",
+        "manualMonthlyPensionAtStartAge": 980,
+        "pensionStartAge": 62,
+        "oasEstimateMode": "residence-years",
+        "oasStartAge": 65,
+        "oasEligible": true
+      },
+      "accounts": {
+        "rrsp": 340000,
+        "rrif": 0,
+        "tfsa": 90000,
+        "nonRegistered": 60000,
+        "cash": 18000,
+        "dcPension": 0
+      },
+      "contributions": {
+        "rrsp": 12000,
+        "tfsa": 7000,
+        "nonRegistered": 3500,
+        "contributionEscalationRate": 0.02,
+        "rrspRoomRemaining": 15000,
+        "tfsaRoomRemaining": 11000
+      },
+      "rentalIncome": [],
+      "foreignPensionIncome": []
+    },
+    "partner": {
+      "profile": {
+        "id": "partner",
+        "currentAge": 55,
+        "sex": "female",
+        "retirementAge": 65,
+        "lifeExpectancy": 94,
+        "provinceAtRetirement": "QC",
+        "pensionPlan": "QPP",
+        "yearsResidedInCanadaAfter18": 37
+      },
+      "employment": {
+        "baseAnnualIncome": 76000,
+        "annualGrowthRate": 0.0225,
+        "partTimeIncomeAfterRetirement": []
+      },
+      "publicBenefits": {
+        "cppQppEstimateMode": "statement-at-65",
+        "statementMonthlyPensionAt65": 760,
+        "pensionStartAge": 72,
+        "oasEstimateMode": "residence-years",
+        "oasStartAge": 65,
+        "oasEligible": true,
+        "notes": "Delayed QPP case to force Quebec-specific modeling attention."
+      },
+      "accounts": {
+        "rrsp": 220000,
+        "rrif": 0,
+        "tfsa": 80000,
+        "nonRegistered": 25000,
+        "cash": 12000,
+        "dcPension": 0
+      },
+      "contributions": {
+        "rrsp": 9000,
+        "tfsa": 7000,
+        "nonRegistered": 2500,
+        "contributionEscalationRate": 0.02,
+        "rrspRoomRemaining": 12000,
+        "tfsaRoomRemaining": 8000
+      },
+      "rentalIncome": [],
+      "foreignPensionIncome": []
+    },
+    "inflationRate": 0.025,
+    "preRetirementReturnRate": 0.0525,
+    "postRetirementReturnRate": 0.0425,
+    "annualFeeRate": 0.007,
+    "taxMode": "nominal",
+    "withdrawalOrder": "tax-aware-blended",
+    "pensionIncomeSplittingEnabled": true,
+    "oasClawbackAwareMode": true,
+    "gisModelingEnabled": false,
+    "expenseProfile": {
+      "desiredAfterTaxSpending": 86000,
+      "housing": 24000,
+      "utilities": 5000,
+      "food": 13200,
+      "transportation": 7600,
+      "healthcare": 4200,
+      "insurance": 3600,
+      "travelAndRecreation": 11000,
+      "debtPayments": 0,
+      "professionalServices": 1200
+    },
+    "oneTimeEvents": [],
+    "projectionStartYear": 2026,
+    "maxProjectionAge": 100
+  }
+}

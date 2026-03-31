@@ -1,0 +1,83 @@
+{
+  "household": {
+    "householdType": "single",
+    "primary": {
+      "profile": {
+        "id": "primary",
+        "currentAge": 66,
+        "sex": "male",
+        "retirementAge": 65,
+        "lifeExpectancy": 92,
+        "provinceAtRetirement": "ON",
+        "pensionPlan": "CPP",
+        "yearsResidedInCanadaAfter18": 40
+      },
+      "employment": {
+        "baseAnnualIncome": 0,
+        "annualGrowthRate": 0,
+        "partTimeIncomeAfterRetirement": []
+      },
+      "publicBenefits": {
+        "cppQppEstimateMode": "statement-at-65",
+        "statementMonthlyPensionAt65": 1507.65,
+        "pensionStartAge": 65,
+        "oasEstimateMode": "residence-years",
+        "oasStartAge": 65,
+        "oasEligible": true
+      },
+      "definedBenefitPension": {
+        "annualAmount": 98000,
+        "startAge": 65,
+        "indexationRate": 0.02
+      },
+      "accounts": {
+        "rrsp": 950000,
+        "rrif": 0,
+        "tfsa": 180000,
+        "nonRegistered": 420000,
+        "cash": 60000,
+        "dcPension": 0
+      },
+      "contributions": {
+        "rrsp": 0,
+        "tfsa": 0,
+        "nonRegistered": 0,
+        "contributionEscalationRate": 0
+      },
+      "annuityIncome": [
+        {
+          "startAge": 65,
+          "annualAmount": 18000,
+          "inflationLinked": false,
+          "description": "Purchased annuity"
+        }
+      ],
+      "rentalIncome": [],
+      "foreignPensionIncome": []
+    },
+    "inflationRate": 0.025,
+    "preRetirementReturnRate": 0.05,
+    "postRetirementReturnRate": 0.04,
+    "annualFeeRate": 0.006,
+    "taxMode": "nominal",
+    "withdrawalOrder": "tax-aware-blended",
+    "pensionIncomeSplittingEnabled": false,
+    "oasClawbackAwareMode": true,
+    "gisModelingEnabled": false,
+    "expenseProfile": {
+      "desiredAfterTaxSpending": 120000,
+      "housing": 28000,
+      "utilities": 4800,
+      "food": 12000,
+      "transportation": 8500,
+      "healthcare": 5000,
+      "insurance": 4500,
+      "travelAndRecreation": 18000,
+      "debtPayments": 0,
+      "professionalServices": 3000
+    },
+    "oneTimeEvents": [],
+    "projectionStartYear": 2026,
+    "maxProjectionAge": 95
+  }
+}

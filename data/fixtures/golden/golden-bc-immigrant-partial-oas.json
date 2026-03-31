@@ -1,0 +1,82 @@
+{
+  "household": {
+    "householdType": "single",
+    "primary": {
+      "profile": {
+        "id": "primary",
+        "currentAge": 52,
+        "sex": "female",
+        "retirementAge": 65,
+        "lifeExpectancy": 93,
+        "provinceAtRetirement": "BC",
+        "pensionPlan": "CPP",
+        "yearsResidedInCanadaAfter18": 22
+      },
+      "employment": {
+        "baseAnnualIncome": 78000,
+        "annualGrowthRate": 0.025,
+        "partTimeIncomeAfterRetirement": []
+      },
+      "publicBenefits": {
+        "cppQppEstimateMode": "manual-at-start-age",
+        "manualMonthlyPensionAtStartAge": 540,
+        "pensionStartAge": 65,
+        "oasEstimateMode": "residence-years",
+        "oasStartAge": 65,
+        "oasEligible": true,
+        "oasResidenceYearsOverride": 22,
+        "immigrationAgeToCanada": 43,
+        "hasSocialSecurityAgreementCountry": true,
+        "notes": "Immigrated to Canada as an adult. Foreign pension and treaty coordination remain user-editable."
+      },
+      "accounts": {
+        "rrsp": 120000,
+        "rrif": 0,
+        "tfsa": 65000,
+        "nonRegistered": 18000,
+        "cash": 12000,
+        "dcPension": 0
+      },
+      "contributions": {
+        "rrsp": 9000,
+        "tfsa": 7000,
+        "nonRegistered": 2000,
+        "contributionEscalationRate": 0.02,
+        "rrspRoomRemaining": 16000,
+        "tfsaRoomRemaining": 21000
+      },
+      "foreignPensionIncome": [
+        {
+          "startAge": 65,
+          "annualAmount": 7200,
+          "inflationLinked": false,
+          "description": "Foreign public pension"
+        }
+      ]
+    },
+    "inflationRate": 0.025,
+    "preRetirementReturnRate": 0.05,
+    "postRetirementReturnRate": 0.04,
+    "annualFeeRate": 0.008,
+    "taxMode": "nominal",
+    "withdrawalOrder": "tax-aware-blended",
+    "pensionIncomeSplittingEnabled": false,
+    "oasClawbackAwareMode": true,
+    "gisModelingEnabled": false,
+    "expenseProfile": {
+      "desiredAfterTaxSpending": 52000,
+      "housing": 18000,
+      "utilities": 4200,
+      "food": 9000,
+      "transportation": 6000,
+      "healthcare": 3600,
+      "insurance": 2600,
+      "travelAndRecreation": 5000,
+      "debtPayments": 0,
+      "professionalServices": 800
+    },
+    "oneTimeEvents": [],
+    "projectionStartYear": 2026,
+    "maxProjectionAge": 100
+  }
+}

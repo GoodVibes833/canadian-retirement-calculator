@@ -1,0 +1,80 @@
+{
+  "household": {
+    "householdType": "single",
+    "primary": {
+      "profile": {
+        "id": "primary",
+        "currentAge": 47,
+        "sex": "female",
+        "retirementAge": 65,
+        "lifeExpectancy": 92,
+        "provinceAtRetirement": "ON",
+        "pensionPlan": "CPP",
+        "yearsResidedInCanadaAfter18": 29
+      },
+      "employment": {
+        "baseAnnualIncome": 98000,
+        "bonusAnnualIncome": 5000,
+        "annualGrowthRate": 0.03,
+        "partTimeIncomeAfterRetirement": []
+      },
+      "publicBenefits": {
+        "cppQppEstimateMode": "statement-at-65",
+        "statementMonthlyPensionAt65": 1050,
+        "pensionStartAge": 65,
+        "oasEstimateMode": "residence-years",
+        "oasStartAge": 65,
+        "oasEligible": true
+      },
+      "accounts": {
+        "rrsp": 210000,
+        "rrif": 0,
+        "tfsa": 75000,
+        "nonRegistered": 30000,
+        "cash": 18000,
+        "dcPension": 0
+      },
+      "contributions": {
+        "rrsp": 14000,
+        "tfsa": 7000,
+        "nonRegistered": 3000,
+        "contributionEscalationRate": 0.025,
+        "rrspRoomRemaining": 21000,
+        "tfsaRoomRemaining": 17000
+      },
+      "rentalIncome": [],
+      "foreignPensionIncome": []
+    },
+    "inflationRate": 0.025,
+    "preRetirementReturnRate": 0.055,
+    "postRetirementReturnRate": 0.045,
+    "annualFeeRate": 0.007,
+    "taxMode": "nominal",
+    "withdrawalOrder": "tax-aware-blended",
+    "pensionIncomeSplittingEnabled": false,
+    "oasClawbackAwareMode": true,
+    "gisModelingEnabled": false,
+    "expenseProfile": {
+      "desiredAfterTaxSpending": 68000,
+      "housing": 22000,
+      "utilities": 4200,
+      "food": 9600,
+      "transportation": 7800,
+      "healthcare": 3200,
+      "insurance": 2600,
+      "travelAndRecreation": 8200,
+      "debtPayments": 2000,
+      "professionalServices": 900
+    },
+    "oneTimeEvents": [
+      {
+        "age": 66,
+        "amount": 18000,
+        "direction": "outflow",
+        "description": "Home repairs"
+      }
+    ],
+    "projectionStartYear": 2026,
+    "maxProjectionAge": 100
+  }
+}

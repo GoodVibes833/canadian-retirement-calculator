@@ -1,0 +1,152 @@
+{
+  "household": {
+    "householdType": "married",
+    "primary": {
+      "profile": {
+        "id": "primary",
+        "currentAge": 58,
+        "sex": "male",
+        "retirementAge": 65,
+        "lifeExpectancy": 92,
+        "provinceAtRetirement": "ON",
+        "pensionPlan": "CPP",
+        "yearsResidedInCanadaAfter18": 40
+      },
+      "employment": {
+        "baseAnnualIncome": 125000,
+        "bonusAnnualIncome": 10000,
+        "annualGrowthRate": 0.03,
+        "partTimeIncomeAfterRetirement": [
+          {
+            "startAge": 65,
+            "endAge": 67,
+            "annualAmount": 18000,
+            "inflationLinked": false,
+            "description": "Bridge consulting income"
+          }
+        ]
+      },
+      "publicBenefits": {
+        "cppQppEstimateMode": "statement-at-65",
+        "statementMonthlyPensionAt65": 1225,
+        "pensionStartAge": 65,
+        "oasEstimateMode": "residence-years",
+        "oasStartAge": 65,
+        "oasEligible": true
+      },
+      "definedBenefitPension": {
+        "annualAmount": 18000,
+        "startAge": 65,
+        "indexationRate": 0.02,
+        "survivorContinuationPercent": 0.6
+      },
+      "accounts": {
+        "rrsp": 470000,
+        "rrif": 0,
+        "tfsa": 135000,
+        "nonRegistered": 95000,
+        "cash": 25000,
+        "dcPension": 0
+      },
+      "contributions": {
+        "rrsp": 15000,
+        "tfsa": 7000,
+        "nonRegistered": 6000,
+        "contributionEscalationRate": 0.025,
+        "rrspRoomRemaining": 24000,
+        "tfsaRoomRemaining": 14000
+      },
+      "rentalIncome": [],
+      "foreignPensionIncome": []
+    },
+    "partner": {
+      "profile": {
+        "id": "partner",
+        "currentAge": 56,
+        "sex": "female",
+        "retirementAge": 63,
+        "lifeExpectancy": 94,
+        "provinceAtRetirement": "ON",
+        "pensionPlan": "CPP",
+        "yearsResidedInCanadaAfter18": 35
+      },
+      "employment": {
+        "baseAnnualIncome": 82000,
+        "annualGrowthRate": 0.025,
+        "partTimeIncomeAfterRetirement": []
+      },
+      "publicBenefits": {
+        "cppQppEstimateMode": "statement-at-65",
+        "statementMonthlyPensionAt65": 890,
+        "pensionStartAge": 65,
+        "oasEstimateMode": "residence-years",
+        "oasStartAge": 67,
+        "oasEligible": true
+      },
+      "definedBenefitPension": {
+        "annualAmount": 12000,
+        "startAge": 63,
+        "indexationRate": 0.015,
+        "survivorContinuationPercent": 0.5
+      },
+      "accounts": {
+        "rrsp": 310000,
+        "rrif": 0,
+        "tfsa": 98000,
+        "nonRegistered": 45000,
+        "cash": 15000,
+        "dcPension": 0
+      },
+      "contributions": {
+        "rrsp": 11000,
+        "tfsa": 7000,
+        "nonRegistered": 3000,
+        "contributionEscalationRate": 0.025,
+        "rrspRoomRemaining": 18000,
+        "tfsaRoomRemaining": 9000
+      },
+      "rentalIncome": [],
+      "foreignPensionIncome": []
+    },
+    "inflationRate": 0.025,
+    "preRetirementReturnRate": 0.055,
+    "postRetirementReturnRate": 0.045,
+    "annualFeeRate": 0.0075,
+    "taxMode": "nominal",
+    "withdrawalOrder": "tax-aware-blended",
+    "pensionIncomeSplittingEnabled": true,
+    "oasClawbackAwareMode": true,
+    "gisModelingEnabled": false,
+    "expenseProfile": {
+      "desiredAfterTaxSpending": 92000,
+      "housing": 26000,
+      "utilities": 5400,
+      "food": 14400,
+      "transportation": 9600,
+      "healthcare": 4800,
+      "insurance": 5200,
+      "travelAndRecreation": 12600,
+      "debtPayments": 4000,
+      "familySupport": 3000,
+      "giftsAndDonations": 2000,
+      "professionalServices": 1000,
+      "legacyGoal": 100000
+    },
+    "oneTimeEvents": [
+      {
+        "age": 66,
+        "amount": 28000,
+        "direction": "outflow",
+        "description": "Vehicle replacement"
+      },
+      {
+        "age": 72,
+        "amount": 180000,
+        "direction": "inflow",
+        "description": "Downsizing proceeds"
+      }
+    ],
+    "projectionStartYear": 2026,
+    "maxProjectionAge": 100
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "household": {
+    "householdType": "single",
+    "primary": {
+      "profile": {
+        "id": "primary",
+        "currentAge": 62,
+        "sex": "female",
+        "retirementAge": 65,
+        "lifeExpectancy": 92,
+        "provinceAtRetirement": "ON",
+        "pensionPlan": "CPP",
+        "yearsResidedInCanadaAfter18": 40
+      },
+      "employment": {
+        "baseAnnualIncome": 91000,
+        "annualGrowthRate": 0.02,
+        "partTimeIncomeAfterRetirement": []
+      },
+      "publicBenefits": {
+        "cppQppEstimateMode": "statement-at-65",
+        "statementMonthlyPensionAt65": 880,
+        "pensionStartAge": 65,
+        "oasEstimateMode": "residence-years",
+        "oasStartAge": 65,
+        "oasEligible": true
+      },
+      "accounts": {
+        "rrsp": 290000,
+        "rrif": 0,
+        "tfsa": 95000,
+        "nonRegistered": 70000,
+        "cash": 25000,
+        "dcPension": 0
+      },
+      "contributions": {
+        "rrsp": 7000,
+        "tfsa": 7000,
+        "nonRegistered": 2000,
+        "contributionEscalationRate": 0.02,
+        "rrspRoomRemaining": 10000,
+        "tfsaRoomRemaining": 7000
+      },
+      "rentalIncome": [
+        {
+          "startAge": 65,
+          "annualAmount": 24000,
+          "inflationLinked": false,
+          "description": "Net rental income"
+        }
+      ],
+      "foreignPensionIncome": []
+    },
+    "inflationRate": 0.025,
+    "preRetirementReturnRate": 0.05,
+    "postRetirementReturnRate": 0.0425,
+    "annualFeeRate": 0.007,
+    "taxMode": "nominal",
+    "withdrawalOrder": "tax-aware-blended",
+    "pensionIncomeSplittingEnabled": false,
+    "oasClawbackAwareMode": true,
+    "gisModelingEnabled": false,
+    "expenseProfile": {
+      "desiredAfterTaxSpending": 72000,
+      "housing": 21000,
+      "utilities": 4400,
+      "food": 9800,
+      "transportation": 5500,
+      "healthcare": 3800,
+      "insurance": 2900,
+      "travelAndRecreation": 9000,
+      "debtPayments": 0,
+      "professionalServices": 1000
+    },
+    "oneTimeEvents": [
+      {
+        "age": 68,
+        "amount": 22000,
+        "direction": "outflow",
+        "description": "Rental property capital repairs"
+      }
+    ],
+    "projectionStartYear": 2026,
+    "maxProjectionAge": 100
+  }
+}

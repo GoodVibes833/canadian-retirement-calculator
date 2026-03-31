@@ -1,0 +1,80 @@
+{
+  "household": {
+    "householdType": "single",
+    "primary": {
+      "profile": {
+        "id": "primary",
+        "currentAge": 60,
+        "sex": "female",
+        "retirementAge": 63,
+        "lifeExpectancy": 93,
+        "provinceAtRetirement": "ON",
+        "pensionPlan": "CPP",
+        "yearsResidedInCanadaAfter18": 40
+      },
+      "employment": {
+        "baseAnnualIncome": 86000,
+        "annualGrowthRate": 0.02,
+        "partTimeIncomeAfterRetirement": [
+          {
+            "startAge": 63,
+            "endAge": 67,
+            "annualAmount": 25000,
+            "inflationLinked": false,
+            "description": "Part-time consulting"
+          }
+        ]
+      },
+      "publicBenefits": {
+        "cppQppEstimateMode": "statement-at-65",
+        "statementMonthlyPensionAt65": 910,
+        "pensionStartAge": 65,
+        "oasEstimateMode": "residence-years",
+        "oasStartAge": 65,
+        "oasEligible": true
+      },
+      "accounts": {
+        "rrsp": 360000,
+        "rrif": 0,
+        "tfsa": 110000,
+        "nonRegistered": 55000,
+        "cash": 20000,
+        "dcPension": 0
+      },
+      "contributions": {
+        "rrsp": 9000,
+        "tfsa": 7000,
+        "nonRegistered": 2500,
+        "contributionEscalationRate": 0.02,
+        "rrspRoomRemaining": 15000,
+        "tfsaRoomRemaining": 10000
+      },
+      "rentalIncome": [],
+      "foreignPensionIncome": []
+    },
+    "inflationRate": 0.025,
+    "preRetirementReturnRate": 0.05,
+    "postRetirementReturnRate": 0.0425,
+    "annualFeeRate": 0.007,
+    "taxMode": "nominal",
+    "withdrawalOrder": "tax-aware-blended",
+    "pensionIncomeSplittingEnabled": false,
+    "oasClawbackAwareMode": true,
+    "gisModelingEnabled": false,
+    "expenseProfile": {
+      "desiredAfterTaxSpending": 70000,
+      "housing": 23000,
+      "utilities": 4600,
+      "food": 10200,
+      "transportation": 6400,
+      "healthcare": 3800,
+      "insurance": 2800,
+      "travelAndRecreation": 11000,
+      "debtPayments": 0,
+      "professionalServices": 900
+    },
+    "oneTimeEvents": [],
+    "projectionStartYear": 2026,
+    "maxProjectionAge": 100
+  }
+}

@@ -1,0 +1,130 @@
+{
+  "household": {
+    "householdType": "married",
+    "primary": {
+      "profile": {
+        "id": "primary",
+        "currentAge": 72,
+        "sex": "male",
+        "retirementAge": 65,
+        "lifeExpectancy": 91,
+        "provinceAtRetirement": "ON",
+        "pensionPlan": "CPP",
+        "yearsResidedInCanadaAfter18": 40
+      },
+      "employment": {
+        "baseAnnualIncome": 0,
+        "annualGrowthRate": 0,
+        "partTimeIncomeAfterRetirement": []
+      },
+      "publicBenefits": {
+        "cppQppEstimateMode": "manual-at-start-age",
+        "manualMonthlyPensionAtStartAge": 1220,
+        "pensionStartAge": 65,
+        "oasEstimateMode": "residence-years",
+        "oasStartAge": 65,
+        "oasEligible": true
+      },
+      "definedBenefitPension": {
+        "annualAmount": 14000,
+        "startAge": 65,
+        "indexationRate": 0.015,
+        "survivorContinuationPercent": 0.6
+      },
+      "accounts": {
+        "rrsp": 0,
+        "rrif": 450000,
+        "tfsa": 90000,
+        "nonRegistered": 55000,
+        "cash": 18000,
+        "dcPension": 0
+      },
+      "contributions": {
+        "rrsp": 0,
+        "tfsa": 0,
+        "nonRegistered": 0,
+        "contributionEscalationRate": 0
+      },
+      "rentalIncome": [],
+      "foreignPensionIncome": []
+    },
+    "partner": {
+      "profile": {
+        "id": "partner",
+        "currentAge": 70,
+        "sex": "female",
+        "retirementAge": 64,
+        "lifeExpectancy": 94,
+        "provinceAtRetirement": "ON",
+        "pensionPlan": "CPP",
+        "yearsResidedInCanadaAfter18": 40
+      },
+      "employment": {
+        "baseAnnualIncome": 0,
+        "annualGrowthRate": 0,
+        "partTimeIncomeAfterRetirement": []
+      },
+      "publicBenefits": {
+        "cppQppEstimateMode": "manual-at-start-age",
+        "manualMonthlyPensionAtStartAge": 860,
+        "pensionStartAge": 65,
+        "oasEstimateMode": "residence-years",
+        "oasStartAge": 65,
+        "oasEligible": true
+      },
+      "definedBenefitPension": {
+        "annualAmount": 9000,
+        "startAge": 64,
+        "indexationRate": 0.01,
+        "survivorContinuationPercent": 0.5
+      },
+      "accounts": {
+        "rrsp": 0,
+        "rrif": 280000,
+        "tfsa": 70000,
+        "nonRegistered": 25000,
+        "cash": 12000,
+        "dcPension": 0
+      },
+      "contributions": {
+        "rrsp": 0,
+        "tfsa": 0,
+        "nonRegistered": 0,
+        "contributionEscalationRate": 0
+      },
+      "rentalIncome": [],
+      "foreignPensionIncome": []
+    },
+    "inflationRate": 0.0225,
+    "preRetirementReturnRate": 0.045,
+    "postRetirementReturnRate": 0.04,
+    "annualFeeRate": 0.0065,
+    "taxMode": "nominal",
+    "withdrawalOrder": "tax-aware-blended",
+    "pensionIncomeSplittingEnabled": true,
+    "oasClawbackAwareMode": true,
+    "gisModelingEnabled": false,
+    "expenseProfile": {
+      "desiredAfterTaxSpending": 78000,
+      "housing": 24000,
+      "utilities": 4600,
+      "food": 11800,
+      "transportation": 6200,
+      "healthcare": 6500,
+      "insurance": 3400,
+      "travelAndRecreation": 8500,
+      "debtPayments": 0,
+      "professionalServices": 1500
+    },
+    "oneTimeEvents": [
+      {
+        "age": 75,
+        "amount": 16000,
+        "direction": "outflow",
+        "description": "Major dental and health expenses"
+      }
+    ],
+    "projectionStartYear": 2026,
+    "maxProjectionAge": 100
+  }
+}
