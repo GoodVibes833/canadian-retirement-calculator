@@ -861,6 +861,60 @@ const taxChecks = [
       );
     },
   },
+  {
+    id: "T23",
+    label: "Quebec career extension credit reduces tax for age-65 workers",
+    check() {
+      const withoutCredit = estimateIncomeTax({
+        taxableIncome: 65000,
+        province: "QC",
+        calendarYear: 2026,
+        age: 65,
+      });
+      const withCredit = estimateIncomeTax({
+        taxableIncome: 65000,
+        province: "QC",
+        calendarYear: 2026,
+        age: 65,
+        eligibleWorkIncome: 12500,
+      });
+
+      assert(
+        Math.abs(withCredit.quebecCareerExtensionCredit - 1155) < 0.01,
+        "Quebec career extension credit should follow the published max-credit and 7% reduction structure in the baseline scaffold.",
+      );
+      assert(
+        withCredit.totalTax < withoutCredit.totalTax,
+        "Quebec career extension credit should reduce modeled tax for eligible working seniors.",
+      );
+      assert(
+        withCredit.warnings.some((warning) =>
+          warning.includes("career extension credit"),
+        ),
+        "Quebec career extension scenario should warn that the 2025 thresholds are being reused as the 2026 scaffold anchor.",
+      );
+    },
+  },
+  {
+    id: "T24",
+    label: "Quebec annual results surface the career extension credit",
+    check() {
+      const input = readJson("data/fixtures/quebec/qc-career-extension-credit.json");
+      const result = simulateRetirementPlan(input, rules);
+      const firstYear = result.years[0];
+
+      assert(
+        Math.abs(firstYear.quebecCareerExtensionCredit - 1155) < 0.01,
+        "Quebec working-senior scenario should surface the career extension credit in annual results.",
+      );
+      assert(
+        firstYear.warnings.some((warning) =>
+          warning.includes("career extension credit"),
+        ),
+        "Quebec working-senior scenario should surface the baseline career extension warning.",
+      );
+    },
+  },
 ];
 
 for (const check of taxChecks) {

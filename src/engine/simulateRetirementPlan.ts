@@ -88,6 +88,7 @@ interface MemberFrame {
 }
 
 interface MemberTaxState {
+  eligibleWorkIncome: number;
   ordinaryTaxableIncome: number;
   grossTaxableCapitalGains: number;
   allowableCapitalLossesCurrentYear: number;
@@ -99,6 +100,7 @@ interface MemberTaxState {
   oasRecoveryTax: number;
   federalForeignTaxCredit: number;
   provincialForeignTaxCredit: number;
+  quebecCareerExtensionCredit: number;
   marginalRate: number;
   province: ProvinceCode;
   oasIncome: number;
@@ -427,6 +429,12 @@ function projectSingleYear(
         sumMemberTaxState(
           memberTaxState,
           (state) => state.provincialForeignTaxCredit,
+        ),
+      ),
+      quebecCareerExtensionCredit: roundCurrency(
+        sumMemberTaxState(
+          memberTaxState,
+          (state) => state.quebecCareerExtensionCredit,
         ),
       ),
       cppQppIncome: roundCurrency(
@@ -965,6 +973,7 @@ function buildBaseTaxState(
     );
 
     state[frame.slot] = {
+      eligibleWorkIncome: Math.max(0, frame.employmentIncome),
       ordinaryTaxableIncome,
       grossTaxableCapitalGains: frame.taxableCapitalGainFromReturnOfCapital,
       allowableCapitalLossesCurrentYear: 0,
@@ -980,6 +989,7 @@ function buildBaseTaxState(
       oasRecoveryTax: 0,
       federalForeignTaxCredit: 0,
       provincialForeignTaxCredit: 0,
+      quebecCareerExtensionCredit: 0,
       marginalRate: 0,
       province: frame.province,
       oasIncome: frame.oasIncome,
@@ -1086,6 +1096,7 @@ function refreshMemberTaxState(
     province: memberState.province,
     calendarYear,
     age: memberState.age,
+    eligibleWorkIncome: memberState.eligibleWorkIncome,
     eligiblePensionIncome: memberState.eligiblePensionIncome,
     eligibleDividendIncome: memberState.eligibleDividendIncome,
     nonEligibleDividendIncome: memberState.nonEligibleDividendIncome,
@@ -1096,6 +1107,7 @@ function refreshMemberTaxState(
   memberState.taxes = taxEstimate.totalTax;
   memberState.federalForeignTaxCredit = taxEstimate.federalForeignTaxCredit;
   memberState.provincialForeignTaxCredit = taxEstimate.provincialForeignTaxCredit;
+  memberState.quebecCareerExtensionCredit = taxEstimate.quebecCareerExtensionCredit;
   memberState.marginalRate = clampRate(taxEstimate.marginalRate);
   memberState.oasRecoveryTax = estimateOasRecoveryTax(
     context,
@@ -2614,7 +2626,7 @@ function buildAssumptionList(context: NormalizedContext): string[] {
     `Inflation assumption: ${(context.input.household.inflationRate * 100).toFixed(2)}%.`,
     `Pre-retirement return assumption: ${(context.input.household.preRetirementReturnRate * 100).toFixed(2)}%.`,
     `Post-retirement return assumption: ${(context.input.household.postRetirementReturnRate * 100).toFixed(2)}%.`,
-    "Tax estimates currently use 2026 federal and selected provincial tables with basic personal, age, and pension-income credits for federal, Ontario, British Columbia, and Alberta, plus a partial Quebec path.",
+    "Tax estimates currently use 2026 federal and selected provincial tables with basic personal, age, and pension-income credits for federal, Ontario, British Columbia, and Alberta, plus a Quebec path that now includes dividend handling, residual foreign tax credits, and a baseline career-extension credit.",
     "OAS recovery tax is estimated with prior-year threshold mapping and capped by modeled OAS income.",
     "Drawdown currently supports a practical blended heuristic, not full optimization.",
     "Locked-in accounts now support baseline LIRA-to-LIF conversion, RRIF-style minimums, and jurisdiction-aware fallback maximums, with manual annual overrides preferred when available.",

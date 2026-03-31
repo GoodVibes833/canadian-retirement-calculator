@@ -12,6 +12,7 @@ export interface ProjectionYear {
   oasRecoveryTax: number;
   federalForeignTaxCredit: number;
   provincialForeignTaxCredit: number;
+  quebecCareerExtensionCredit: number;
   cppQppIncome: number;
   oasIncome: number;
   dbPensionIncome: number;

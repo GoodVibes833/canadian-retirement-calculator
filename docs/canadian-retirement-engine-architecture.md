@@ -158,7 +158,7 @@ The initial scaffold in `src/engine/simulateRetirementPlan.ts` intentionally doe
 
 The scaffold is intentionally incomplete in these areas:
 
-- taxes now use a 2026 federal and province-aware scaffold for ON, BC, AB, and QC, including basic personal, age, and pension-income credits for federal / ON / BC / AB and a partial Quebec path,
+- taxes now use a 2026 federal and province-aware scaffold for ON, BC, AB, and QC, including basic personal, age, and pension-income credits for federal / ON / BC / AB and a Quebec path that now includes dividend handling, residual foreign tax credits, and a baseline career-extension credit,
 - RRIF minimum withdrawals are modeled, and locked-in accounts now support baseline LIRA-to-LIF conversion plus ON / BC / AB fallback LIF guardrails with Quebec warning-heavy partial support,
 - non-registered withdrawals now track adjusted cost base and realize taxable capital gains using the ruleset inclusion rate, while explicit taxable-account interest, foreign dividends, Canadian eligible / non-eligible dividends, and return-of-capital cash distributions can be modeled annually; return-of-capital distributions also reduce modeled non-registered market value, and baseline federal plus ON / BC / AB / QC provincial residual-credit foreign-tax-credit approximations are now supported alongside same-year and carryforward net-capital-loss handling, while fuller Quebec form-level and multi-country foreign tax credit detail remain incomplete,
 - GIS is not calculated,

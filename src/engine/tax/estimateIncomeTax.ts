@@ -31,6 +31,7 @@ export interface TaxEstimateInput {
   province: ProvinceCode;
   calendarYear: number;
   age?: number;
+  eligibleWorkIncome?: number;
   eligiblePensionIncome?: number;
   eligibleDividendIncome?: number;
   nonEligibleDividendIncome?: number;
@@ -45,6 +46,7 @@ export interface TaxEstimateResult {
   marginalRate: number;
   federalForeignTaxCredit: number;
   provincialForeignTaxCredit: number;
+  quebecCareerExtensionCredit: number;
   warnings: string[];
 }
 
@@ -191,6 +193,9 @@ const PROVINCIAL_TAX_CONFIG_2026: Partial<Record<ProvinceCode, ProvincialTaxConf
 //   https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5010-d/5010-d-25e.txt
 // - Quebec dividend tax credit:
 //   https://www.revenuquebec.ca/en/citizens/income-tax-return/completing-your-income-tax-return/how-to-complete-your-income-tax-return/line-by-line-help/400-to-447-income-tax-and-contributions/line-415/
+// - Quebec career extension credit:
+//   https://www.revenuquebec.ca/en/citizens/income-tax-return/completing-your-income-tax-return/how-to-complete-your-income-tax-return/line-by-line-help/350-to-398-1-non-refundable-tax-credits/line-391/
+//   https://www.revenuquebec.ca/en/citizens/tax-credits/tax-credit-for-career-extension/
 // - Federal foreign tax credit guidance:
 //   https://www.canada.ca/en/revenue-agency/services/tax/individuals/topics/about-your-tax-return/tax-return/completing-a-tax-return/deductions-credits-expenses/line-40500-federal-foreign-tax-credit.html
 // - Ontario 2025 package, line 82 provincial foreign tax credit:
@@ -240,6 +245,7 @@ export function estimateIncomeTax(
     marginalRate,
     federalForeignTaxCredit: internal.federalForeignTaxCredit,
     provincialForeignTaxCredit: internal.provincialForeignTaxCredit,
+    quebecCareerExtensionCredit: internal.quebecCareerExtensionCredit,
     warnings,
   };
 }
@@ -336,6 +342,7 @@ function estimateIncomeTaxInternal(
     federalTax,
     federalForeignTaxCredit,
     provincialForeignTaxCredit,
+    quebecCareerExtensionCredit: provincialTaxResult.quebecCareerExtensionCredit,
     provincialTax,
     totalTax: federalTax + provincialTax,
     warnings,
@@ -370,12 +377,17 @@ function calculateFederalCredits(
 
 function calculateProvincialTax(
   input: TaxEstimateInput,
-): { provincialTaxBeforeForeignTaxCredit: number; warnings: string[] } {
+): {
+  provincialTaxBeforeForeignTaxCredit: number;
+  quebecCareerExtensionCredit: number;
+  warnings: string[];
+} {
   const config = PROVINCIAL_TAX_CONFIG_2026[input.province];
 
   if (!config) {
     return {
       provincialTaxBeforeForeignTaxCredit: 0,
+      quebecCareerExtensionCredit: 0,
       warnings: [
         `Province ${input.province} is not yet explicitly modeled in the tax scaffold. Federal tax only is being used.`,
       ],
@@ -384,6 +396,7 @@ function calculateProvincialTax(
 
   const taxableIncome = Math.max(0, input.taxableIncome);
   const baseTax = applyProgressiveTax(taxableIncome, config.brackets);
+  const warnings: string[] = [];
   const ageAmount =
     input.age !== undefined && input.age >= 65 && config.ageAmountRule
       ? resolveReducedClaimAmount(config.ageAmountRule, taxableIncome)
@@ -407,9 +420,19 @@ function calculateProvincialTax(
     provincialTax += estimateOntarioHealthPremium(taxableIncome);
   }
 
+  const quebecCareerExtensionCredit = calculateQuebecCareerExtensionCredit(input);
+
+  if (quebecCareerExtensionCredit > 0) {
+    provincialTax = Math.max(0, provincialTax - quebecCareerExtensionCredit);
+    warnings.push(
+      "Quebec career extension credit currently uses the published 2025 thresholds as the 2026 scaffold anchor and uses modeled taxable income as a proxy for net income.",
+    );
+  }
+
   return {
     provincialTaxBeforeForeignTaxCredit: Math.max(0, provincialTax),
-    warnings: [],
+    quebecCareerExtensionCredit,
+    warnings,
   };
 }
 
@@ -492,6 +515,35 @@ function calculateProvincialForeignTaxCredit(
       : provincialTaxBeforeForeignTaxCredit * foreignIncomeShare;
 
   return Math.min(residualForeignTax, maximumCredit);
+}
+
+function calculateQuebecCareerExtensionCredit(
+  input: TaxEstimateInput,
+): number {
+  if (input.province !== "QC" || (input.age ?? 0) < 65) {
+    return 0;
+  }
+
+  const taxableIncome = Math.max(0, input.taxableIncome);
+  const eligibleWorkIncome = Math.max(0, input.eligibleWorkIncome ?? 0);
+  const excludedWorkIncome = 7500;
+  const maximumEligibleWorkIncome = 12500;
+  const creditRate = 0.35;
+  const maximumCredit = 1750;
+  const reductionThreshold = 56500;
+  const reductionRate = 0.07;
+
+  if (eligibleWorkIncome <= excludedWorkIncome || taxableIncome >= 81500) {
+    return 0;
+  }
+
+  const baseCredit =
+    Math.min(maximumEligibleWorkIncome, eligibleWorkIncome) - excludedWorkIncome;
+  const reducedCredit =
+    baseCredit * creditRate -
+    Math.max(0, taxableIncome - reductionThreshold) * reductionRate;
+
+  return Math.min(maximumCredit, Math.max(0, reducedCredit));
 }
 
 function resolveEligibleDividendTaxableAmount(
