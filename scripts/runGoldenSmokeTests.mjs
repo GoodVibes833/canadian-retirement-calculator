@@ -915,6 +915,34 @@ const taxChecks = [
       );
     },
   },
+  {
+    id: "T25",
+    label: "Quebec Schedule B age and retirement-income amounts reduce tax for a single retiree",
+    check() {
+      const input = readJson("data/fixtures/quebec/qc-age-retirement-credit.json");
+      const result = simulateRetirementPlan(input, rules);
+      const firstYear = result.years[0];
+
+      assert(
+        Math.abs(firstYear.quebecTaxReliefMeasuresCredit - 146.72) < 0.01,
+        "Quebec single retiree should surface the actually applied non-refundable Schedule B credit amount.",
+      );
+      assert(
+        firstYear.taxes === 0,
+        "Quebec retiree scenario should have provincial tax reduced to zero in this low-tax case.",
+      );
+      assert(
+        Math.abs(firstYear.afterTaxIncome - 20000) < 0.01,
+        "Quebec retiree after-tax income should reflect the full low-income tax relief after the applied Schedule B credit.",
+      );
+      assert(
+        firstYear.warnings.some((warning) =>
+          warning.includes("Quebec Schedule B"),
+        ),
+        "Quebec retiree scenario should warn that the Schedule B path is still a household-level approximation.",
+      );
+    },
+  },
 ];
 
 for (const check of taxChecks) {

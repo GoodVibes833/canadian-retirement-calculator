@@ -334,7 +334,7 @@ function estimateIncomeTaxInternal(
 
   if (input.province === "QC") {
     warnings.push(
-      "Quebec provincial tax currently applies the indexed basic personal amount, but senior-specific Quebec credits remain partial in the scaffold.",
+      "Quebec provincial tax currently applies the indexed basic personal amount and a baseline career extension credit, but Schedule B relief measures, senior-specific detail, and form-level Quebec calculations remain partial in the scaffold.",
     );
   }
 

@@ -101,6 +101,7 @@ interface MemberTaxState {
   federalForeignTaxCredit: number;
   provincialForeignTaxCredit: number;
   quebecCareerExtensionCredit: number;
+  quebecTaxReliefMeasuresCredit: number;
   marginalRate: number;
   province: ProvinceCode;
   oasIncome: number;
@@ -364,6 +365,12 @@ function projectSingleYear(
     initialGap,
   );
 
+  const quebecTaxReliefMeasuresCreditApplied = applyQuebecTaxReliefMeasures(
+    context,
+    memberTaxState,
+    warnings,
+  );
+
   warnings.push(...collectTaxWarnings(memberTaxState));
   warnings.push(...drawdown.warnings, ...oneTimeCashFlow.descriptions);
 
@@ -382,7 +389,10 @@ function projectSingleYear(
     memberTaxState,
     (state) => state.oasRecoveryTax,
   );
-  const afterTaxIncome = baseAfterTaxCash + drawdown.netFromWithdrawals;
+  const afterTaxIncome =
+    baseAfterTaxCash +
+    drawdown.netFromWithdrawals +
+    quebecTaxReliefMeasuresCreditApplied;
   const shortfallOrSurplus = afterTaxIncome - requiredCash;
 
   if (shortfallOrSurplus > 0) {
@@ -435,6 +445,12 @@ function projectSingleYear(
         sumMemberTaxState(
           memberTaxState,
           (state) => state.quebecCareerExtensionCredit,
+        ),
+      ),
+      quebecTaxReliefMeasuresCredit: roundCurrency(
+        sumMemberTaxState(
+          memberTaxState,
+          (state) => state.quebecTaxReliefMeasuresCredit,
         ),
       ),
       cppQppIncome: roundCurrency(
@@ -990,6 +1006,7 @@ function buildBaseTaxState(
       federalForeignTaxCredit: 0,
       provincialForeignTaxCredit: 0,
       quebecCareerExtensionCredit: 0,
+      quebecTaxReliefMeasuresCredit: 0,
       marginalRate: 0,
       province: frame.province,
       oasIncome: frame.oasIncome,
@@ -1053,6 +1070,94 @@ function finalizeMemberTaxState(
   }
 
   return finalizedState;
+}
+
+function applyQuebecTaxReliefMeasures(
+  context: NormalizedContext,
+  memberTaxState: Partial<Record<MemberSlot, MemberTaxState>>,
+  warnings: string[],
+): number {
+  const qcEntries = (Object.entries(memberTaxState) as Array<
+    [MemberSlot, MemberTaxState | undefined]
+  >).filter(([, state]) => state?.province === "QC");
+
+  if (qcEntries.length === 0) {
+    return 0;
+  }
+
+  const creditRate = 0.14;
+  const familyIncomeReductionThreshold = 42090;
+  const familyIncomeReductionRate = 0.1875;
+  const quebecAgeAmount = 3906;
+  const quebecRetirementIncomeAmountMax = 3470;
+
+  const familyIncomeProxy = qcEntries.reduce(
+    (sum, [, state]) => sum + Math.max(0, state?.taxableIncome ?? 0),
+    0,
+  );
+  const claimBaseBySlot: Partial<Record<MemberSlot, number>> = {};
+  let totalClaimBase = 0;
+
+  for (const [slot, state] of qcEntries) {
+    if (!state) {
+      continue;
+    }
+
+    const ageClaimAmount = state.age >= 65 ? quebecAgeAmount : 0;
+    const retirementIncomeClaimAmount = Math.min(
+      quebecRetirementIncomeAmountMax,
+      Math.max(0, state.eligiblePensionIncome) * 1.25,
+    );
+    const claimBase = ageClaimAmount + retirementIncomeClaimAmount;
+
+    claimBaseBySlot[slot] = claimBase;
+    totalClaimBase += claimBase;
+  }
+
+  if (totalClaimBase <= 0) {
+    return 0;
+  }
+
+  const familyReduction = Math.max(
+    0,
+    familyIncomeProxy - familyIncomeReductionThreshold,
+  );
+  const pooledClaimAmount = Math.max(
+    0,
+    totalClaimBase - familyReduction * familyIncomeReductionRate,
+  );
+
+  if (pooledClaimAmount <= 0) {
+    return 0;
+  }
+
+  let totalCreditApplied = 0;
+
+  for (const [slot, state] of qcEntries) {
+    if (!state) {
+      continue;
+    }
+
+    const claimBase = claimBaseBySlot[slot] ?? 0;
+
+    if (claimBase <= 0) {
+      continue;
+    }
+
+    const allocatedClaimAmount = pooledClaimAmount * (claimBase / totalClaimBase);
+    const creditAmount = allocatedClaimAmount * creditRate;
+    const appliedCreditAmount = Math.min(creditAmount, state.taxes);
+
+    state.quebecTaxReliefMeasuresCredit = appliedCreditAmount;
+    state.taxes = Math.max(0, state.taxes - appliedCreditAmount);
+    totalCreditApplied += appliedCreditAmount;
+  }
+
+  warnings.push(
+    "Quebec Schedule B age and retirement-income amounts are now modeled with a household-level 2025 schedule approximation. The living-alone amount is not yet modeled, and taxable income is used as a proxy for line 275 family income.",
+  );
+
+  return totalCreditApplied;
 }
 
 function refreshMemberTaxState(
@@ -2626,7 +2731,7 @@ function buildAssumptionList(context: NormalizedContext): string[] {
     `Inflation assumption: ${(context.input.household.inflationRate * 100).toFixed(2)}%.`,
     `Pre-retirement return assumption: ${(context.input.household.preRetirementReturnRate * 100).toFixed(2)}%.`,
     `Post-retirement return assumption: ${(context.input.household.postRetirementReturnRate * 100).toFixed(2)}%.`,
-    "Tax estimates currently use 2026 federal and selected provincial tables with basic personal, age, and pension-income credits for federal, Ontario, British Columbia, and Alberta, plus a Quebec path that now includes dividend handling, residual foreign tax credits, and a baseline career-extension credit.",
+    "Tax estimates currently use 2026 federal and selected provincial tables with basic personal, age, and pension-income credits for federal, Ontario, British Columbia, and Alberta, plus a Quebec path that now includes dividend handling, residual foreign tax credits, a baseline career-extension credit, and a household-level Schedule B age and retirement-income approximation.",
     "OAS recovery tax is estimated with prior-year threshold mapping and capped by modeled OAS income.",
     "Drawdown currently supports a practical blended heuristic, not full optimization.",
     "Locked-in accounts now support baseline LIRA-to-LIF conversion, RRIF-style minimums, and jurisdiction-aware fallback maximums, with manual annual overrides preferred when available.",
