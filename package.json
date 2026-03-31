@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit false --outDir .build",
+    "build:deploy": "npm run typecheck && npm run smoke:golden && npm run build:ui",
     "build:ui": "vite build",
     "smoke:golden": "npm run build && node scripts/runGoldenSmokeTests.mjs",
     "preview": "vite preview",
