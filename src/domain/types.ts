@@ -66,6 +66,7 @@ export interface PublicBenefitInput {
   oasStartAge: number;
   oasEligible?: boolean;
   oasResidenceYearsOverride?: number;
+  allowanceSurvivorEligible?: boolean;
   immigrationAgeToCanada?: number;
   hasSocialSecurityAgreementCountry?: boolean;
   notes?: string;

@@ -16,6 +16,9 @@ export interface ProjectionYear {
   quebecTaxReliefMeasuresCredit: number;
   cppQppIncome: number;
   oasIncome: number;
+  gisIncome: number;
+  allowanceIncome: number;
+  allowanceSurvivorIncome: number;
   dbPensionIncome: number;
   otherPlannedIncome: number;
   rrspRrifWithdrawals: number;

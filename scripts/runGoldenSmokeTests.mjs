@@ -996,6 +996,84 @@ const taxChecks = [
       );
     },
   },
+  {
+    id: "T28",
+    label: "GIS single scenario adds tax-free income and reduces TFSA drawdown",
+    check() {
+      const enabledInput = readJson("data/fixtures/gis/on-single-gis.json");
+      const disabledInput = readJson("data/fixtures/gis/on-single-gis.json");
+      disabledInput.household.gisModelingEnabled = false;
+
+      const enabledResult = simulateRetirementPlan(enabledInput, rules);
+      const disabledResult = simulateRetirementPlan(disabledInput, rules);
+      const enabledYear = enabledResult.years[0];
+      const disabledYear = disabledResult.years[0];
+
+      assert(
+        enabledYear.gisIncome > 0,
+        "Low-income single OAS scenario should produce modeled GIS income when GIS support is enabled.",
+      );
+      assert(
+        enabledYear.tfsaWithdrawals < disabledYear.tfsaWithdrawals,
+        "Modeled GIS income should reduce the need for TFSA drawdown in the low-income single scenario.",
+      );
+      assert(
+        enabledYear.warnings.some((warning) =>
+          warning.includes("current-year income proxy"),
+        ),
+        "GIS single scenario should warn that the supplement path is using a current-year proxy.",
+      );
+    },
+  },
+  {
+    id: "T29",
+    label: "Allowance couple scenario models both GIS and Allowance cash flows",
+    check() {
+      const input = readJson("data/fixtures/gis/on-allowance-couple.json");
+      const result = simulateRetirementPlan(input, rules);
+      const firstYear = result.years[0];
+
+      assert(
+        firstYear.gisIncome > 0,
+        "Allowance household should still produce GIS for the older OAS-recipient spouse.",
+      );
+      assert(
+        firstYear.allowanceIncome > 0,
+        "Allowance household should produce Allowance income for the younger spouse.",
+      );
+      assert(
+        firstYear.afterTaxIncome >=
+          firstYear.oasIncome + firstYear.gisIncome + firstYear.allowanceIncome,
+        "Allowance household after-tax income should include the modeled tax-free supplement cash flows.",
+      );
+      assert(
+        firstYear.warnings.some((warning) =>
+          warning.includes("linear taper"),
+        ),
+        "Allowance scenario should warn that the GIS / Allowance taper is still a baseline approximation.",
+      );
+    },
+  },
+  {
+    id: "T30",
+    label: "Allowance for the Survivor requires an explicit flag and produces survivor income",
+    check() {
+      const input = readJson("data/fixtures/gis/on-allowance-survivor.json");
+      const result = simulateRetirementPlan(input, rules);
+      const firstYear = result.years[0];
+
+      assert(
+        firstYear.allowanceSurvivorIncome > 0,
+        "Allowance-for-the-Survivor scenario should produce survivor-allowance income when the explicit eligibility flag is supplied.",
+      );
+      assert(
+        firstYear.warnings.some((warning) =>
+          warning.includes("explicit eligibility flag"),
+        ),
+        "Allowance-for-the-Survivor scenario should warn that widowhood eligibility is not auto-detected.",
+      );
+    },
+  },
 ];
 
 for (const check of taxChecks) {

@@ -1,0 +1,69 @@
+{
+  "household": {
+    "householdType": "single",
+    "primary": {
+      "profile": {
+        "id": "primary",
+        "currentAge": 62,
+        "retirementAge": 62,
+        "lifeExpectancy": 88,
+        "provinceAtRetirement": "ON",
+        "pensionPlan": "CPP",
+        "yearsResidedInCanadaAfter18": 40
+      },
+      "employment": {
+        "baseAnnualIncome": 0,
+        "annualGrowthRate": 0,
+        "partTimeIncomeAfterRetirement": []
+      },
+      "publicBenefits": {
+        "cppQppEstimateMode": "manual-at-start-age",
+        "manualMonthlyPensionAtStartAge": 0,
+        "pensionStartAge": 65,
+        "oasEstimateMode": "residence-years",
+        "oasStartAge": 65,
+        "oasEligible": false,
+        "allowanceSurvivorEligible": true
+      },
+      "accounts": {
+        "rrsp": 0,
+        "rrif": 0,
+        "tfsa": 0,
+        "nonRegistered": 0,
+        "cash": 0,
+        "lira": 0,
+        "lif": 0,
+        "dcPension": 0
+      },
+      "contributions": {
+        "rrsp": 0,
+        "tfsa": 0,
+        "nonRegistered": 0,
+        "contributionEscalationRate": 0
+      }
+    },
+    "inflationRate": 0.02,
+    "preRetirementReturnRate": 0.045,
+    "postRetirementReturnRate": 0.04,
+    "annualFeeRate": 0.006,
+    "taxMode": "nominal",
+    "withdrawalOrder": "tax-aware-blended",
+    "pensionIncomeSplittingEnabled": false,
+    "oasClawbackAwareMode": true,
+    "gisModelingEnabled": true,
+    "expenseProfile": {
+      "desiredAfterTaxSpending": 15000,
+      "housing": 8000,
+      "utilities": 1800,
+      "food": 3000,
+      "transportation": 1200,
+      "healthcare": 800,
+      "insurance": 200,
+      "travelAndRecreation": 0,
+      "debtPayments": 0
+    },
+    "oneTimeEvents": [],
+    "projectionStartYear": 2026,
+    "maxProjectionAge": 63
+  }
+}

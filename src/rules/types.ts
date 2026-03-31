@@ -65,7 +65,9 @@ export interface OasRuleSet {
   recoveryPeriods: OasRecoveryPeriod[];
   gisMaximums: GisMaximum[];
   allowanceMaximumMonthly: number;
+  allowanceIncomeCutoff: number;
   allowanceSurvivorMaximumMonthly: number;
+  allowanceSurvivorIncomeCutoff: number;
 }
 
 export interface RrifRuleSet {
