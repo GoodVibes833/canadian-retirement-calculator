@@ -570,6 +570,79 @@ const taxChecks = [
       );
     },
   },
+  {
+    id: "T15",
+    label: "Return of capital reduces ACB and can trigger a deemed capital gain",
+    check() {
+      const input = readJson(
+        "data/fixtures/taxable-account/on-taxable-return-of-capital.json",
+      );
+      const result = simulateRetirementPlan(input, rules);
+      const firstYear = result.years[0];
+
+      assert(
+        firstYear.otherPlannedIncome >= 5000,
+        "Return of capital distribution should appear in planned cash income.",
+      );
+      assert(
+        firstYear.taxableWithdrawals === 0,
+        "Return of capital cash should reduce or eliminate the need for taxable withdrawals in this scenario.",
+      );
+      assert(
+        firstYear.realizedCapitalGains >= 2000,
+        "Return of capital above remaining ACB should trigger a deemed capital gain.",
+      );
+      assert(
+        firstYear.taxableCapitalGains >= 1000,
+        "The deemed capital gain should flow into taxable capital gains using the modeled inclusion rate.",
+      );
+      assert(
+        firstYear.endOfYearAccountBalances.primary.nonRegisteredAdjustedCostBase === 0,
+        "Return of capital should reduce the taxable-account ACB to zero once exhausted.",
+      );
+      assert(
+        firstYear.warnings.some((warning) =>
+          warning.includes("deemed capital gain"),
+        ),
+        "Return-of-capital scenario should warn when ACB exhaustion creates a deemed capital gain.",
+      );
+    },
+  },
+  {
+    id: "T16",
+    label: "Foreign dividends are taxed as ordinary income without dividend credits",
+    check() {
+      const foreignInput = readJson(
+        "data/fixtures/taxable-account/on-taxable-foreign-dividend.json",
+      );
+      const eligibleInput = readJson(
+        "data/fixtures/taxable-account/on-taxable-foreign-dividend.json",
+      );
+      eligibleInput.household.primary.taxableAccountTaxProfile = {
+        annualEligibleDividendIncome: 15000,
+      };
+
+      const foreignResult = simulateRetirementPlan(foreignInput, rules);
+      const eligibleResult = simulateRetirementPlan(eligibleInput, rules);
+      const foreignYear = foreignResult.years[0];
+      const eligibleYear = eligibleResult.years[0];
+
+      assert(
+        foreignYear.otherPlannedIncome >= 15000,
+        "Foreign dividend cash income should appear in other planned income.",
+      );
+      assert(
+        foreignYear.taxes > eligibleYear.taxes,
+        "Foreign dividend income should be taxed less favourably than equal eligible Canadian dividends.",
+      );
+      assert(
+        foreignYear.warnings.some((warning) =>
+          warning.includes("Foreign dividend income is being modeled"),
+        ),
+        "Foreign-dividend scenario should warn that foreign tax credits are not yet modeled.",
+      );
+    },
+  },
 ];
 
 for (const check of taxChecks) {

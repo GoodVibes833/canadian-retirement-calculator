@@ -71,6 +71,11 @@
       "label": "CRA - Line 12100 interest and other investment income",
       "url": "https://www.canada.ca/en/revenue-agency/services/tax/individuals/topics/about-your-tax-return/tax-return/completing-a-tax-return/personal-income/line-12100-interest-other-investment-income.html",
       "accessedOn": "2026-03-31"
+    },
+    {
+      "label": "CRA - Tax treatment of mutual funds",
+      "url": "https://www.canada.ca/en/revenue-agency/services/tax/individuals/topics/about-your-tax-return/tax-return/completing-a-tax-return/personal-income/line-12700-capital-gains/completing-schedule-3/tax-treatment-mutual-funds.html",
+      "accessedOn": "2026-03-31"
     }
   ],
   "cpp": {
