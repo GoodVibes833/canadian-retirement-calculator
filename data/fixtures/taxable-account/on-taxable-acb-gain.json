@@ -1,0 +1,78 @@
+{
+  "household": {
+    "householdType": "single",
+    "primary": {
+      "profile": {
+        "id": "primary",
+        "currentAge": 65,
+        "sex": "female",
+        "retirementAge": 65,
+        "lifeExpectancy": 90,
+        "provinceAtRetirement": "ON",
+        "pensionPlan": "CPP",
+        "yearsResidedInCanadaAfter18": 40
+      },
+      "employment": {
+        "baseAnnualIncome": 0,
+        "bonusAnnualIncome": 0,
+        "annualGrowthRate": 0,
+        "partTimeIncomeAfterRetirement": []
+      },
+      "publicBenefits": {
+        "cppQppEstimateMode": "statement-at-65",
+        "statementMonthlyPensionAt65": 0,
+        "pensionStartAge": 70,
+        "oasEstimateMode": "residence-years",
+        "oasStartAge": 65,
+        "oasEligible": false
+      },
+      "definedBenefitPension": {
+        "annualAmount": 25000,
+        "startAge": 65,
+        "indexationRate": 0
+      },
+      "taxableAccountTaxProfile": {
+        "nonRegisteredAdjustedCostBase": 60000
+      },
+      "accounts": {
+        "rrsp": 0,
+        "rrif": 0,
+        "tfsa": 0,
+        "nonRegistered": 100000,
+        "cash": 0,
+        "dcPension": 0
+      },
+      "contributions": {
+        "rrsp": 0,
+        "tfsa": 0,
+        "nonRegistered": 0,
+        "contributionEscalationRate": 0
+      },
+      "rentalIncome": [],
+      "foreignPensionIncome": []
+    },
+    "inflationRate": 0.02,
+    "preRetirementReturnRate": 0.04,
+    "postRetirementReturnRate": 0.04,
+    "annualFeeRate": 0,
+    "taxMode": "nominal",
+    "withdrawalOrder": "taxable-first",
+    "pensionIncomeSplittingEnabled": false,
+    "oasClawbackAwareMode": true,
+    "gisModelingEnabled": false,
+    "expenseProfile": {
+      "desiredAfterTaxSpending": 80000,
+      "housing": 24000,
+      "utilities": 3600,
+      "food": 9000,
+      "transportation": 4800,
+      "healthcare": 3000,
+      "insurance": 2400,
+      "travelAndRecreation": 12000,
+      "debtPayments": 0
+    },
+    "oneTimeEvents": [],
+    "projectionStartYear": 2026,
+    "maxProjectionAge": 65
+  }
+}

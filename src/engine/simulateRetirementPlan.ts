@@ -1,6 +1,5 @@
 import type {
   HouseholdMemberInput,
-  InvestmentAccountBalances,
   ProvinceCode,
   SimulationInput,
   WithdrawalOrder,
@@ -39,6 +38,7 @@ interface AccountLedger {
   rrif: number;
   tfsa: number;
   nonRegistered: number;
+  nonRegisteredCostBase: number;
   cash: number;
   lira: number;
   lif: number;
@@ -81,6 +81,8 @@ interface MemberTaxState {
   eligiblePensionIncome: number;
   pensionIncomeSplitIn: number;
   pensionIncomeSplitOut: number;
+  realizedCapitalGains: number;
+  taxableCapitalGains: number;
   warnings: string[];
 }
 
@@ -95,6 +97,8 @@ interface DrawdownResult {
   lifWithdrawals: number;
   tfsaWithdrawals: number;
   taxableWithdrawals: number;
+  realizedCapitalGains: number;
+  taxableCapitalGains: number;
   cashWithdrawals: number;
   netFromWithdrawals: number;
   remainingGap: number;
@@ -129,6 +133,13 @@ interface PensionSplitCandidateResult {
   transferAmount: number;
   transferFrom?: MemberSlot;
   transferTo?: MemberSlot;
+}
+
+interface TaxableWithdrawalBreakdown {
+  costBaseReduction: number;
+  realizedCapitalGain: number;
+  taxableCapitalGain: number;
+  ignoredCapitalLoss: boolean;
 }
 
 export function simulateRetirementPlan(
@@ -316,7 +327,8 @@ function projectSingleYear(
     sumMemberFrames(memberFrames, (frame) => frame.otherPlannedIncome) +
     mandatoryMinimumWithdrawals.total +
     drawdown.rrspRrifWithdrawals +
-    drawdown.lifWithdrawals;
+    drawdown.lifWithdrawals +
+    drawdown.taxableCapitalGains;
   const taxes = sumMemberTaxState(memberTaxState, (state) => state.taxes);
   const oasRecoveryTax = sumMemberTaxState(
     memberTaxState,
@@ -380,6 +392,8 @@ function projectSingleYear(
       ),
       tfsaWithdrawals: roundCurrency(drawdown.tfsaWithdrawals),
       taxableWithdrawals: roundCurrency(drawdown.taxableWithdrawals),
+      realizedCapitalGains: roundCurrency(drawdown.realizedCapitalGains),
+      taxableCapitalGains: roundCurrency(drawdown.taxableCapitalGains),
       cashWithdrawals: roundCurrency(drawdown.cashWithdrawals),
       endOfYearAccountBalances: {
         primary: roundAccountRecord(balances.primary),
@@ -394,10 +408,8 @@ function projectSingleYear(
 
 function initializeHouseholdLedger(input: SimulationInput): HouseholdLedger {
   return {
-    primary: toAccountLedger(input.household.primary.accounts),
-    partner: input.household.partner
-      ? toAccountLedger(input.household.partner.accounts)
-      : undefined,
+    primary: toAccountLedger(input.household.primary),
+    partner: input.household.partner ? toAccountLedger(input.household.partner) : undefined,
   };
 }
 
@@ -476,6 +488,7 @@ function applySurvivorAdjustments(
     survivorAccount.rrif += deceasedAccount.rrif;
     survivorAccount.tfsa += deceasedAccount.tfsa;
     survivorAccount.nonRegistered += deceasedAccount.nonRegistered;
+    survivorAccount.nonRegisteredCostBase += deceasedAccount.nonRegisteredCostBase;
     survivorAccount.cash += deceasedAccount.cash;
     survivorAccount.lira += deceasedAccount.lira;
     survivorAccount.lif += deceasedAccount.lif;
@@ -485,6 +498,7 @@ function applySurvivorAdjustments(
     deceasedAccount.rrif = 0;
     deceasedAccount.tfsa = 0;
     deceasedAccount.nonRegistered = 0;
+    deceasedAccount.nonRegisteredCostBase = 0;
     deceasedAccount.cash = 0;
     deceasedAccount.lira = 0;
     deceasedAccount.lif = 0;
@@ -770,6 +784,8 @@ function buildBaseTaxState(
       ),
       pensionIncomeSplitIn: 0,
       pensionIncomeSplitOut: 0,
+      realizedCapitalGains: 0,
+      taxableCapitalGains: 0,
       warnings: [],
     };
   }
@@ -1016,6 +1032,8 @@ function executeDrawdown(
   let lifWithdrawals = 0;
   let tfsaWithdrawals = 0;
   let taxableWithdrawals = 0;
+  let realizedCapitalGains = 0;
+  let taxableCapitalGains = 0;
   let cashWithdrawals = 0;
   let netFromWithdrawals = 0;
   const warnings: string[] = [];
@@ -1048,15 +1066,86 @@ function executeDrawdown(
         break;
       }
       case "nonRegistered": {
-        const amount = Math.min(account.nonRegistered, remainingGap);
-        if (amount <= 0) {
+        if (account.nonRegistered <= 0) {
           continue;
         }
 
-        account.nonRegistered -= amount;
-        taxableWithdrawals += amount;
-        netFromWithdrawals += amount;
-        remainingGap -= amount;
+        const taxState = memberTaxState[step.slot];
+        if (!taxState) {
+          continue;
+        }
+
+        const grossWithdrawal = solveNonRegisteredWithdrawalForNetGap(
+          context,
+          period.calendarYear,
+          taxState,
+          remainingGap,
+          account.nonRegistered,
+          account.nonRegisteredCostBase,
+        );
+
+        if (grossWithdrawal <= 0) {
+          continue;
+        }
+
+        const breakdown = calculateTaxableWithdrawalBreakdown(
+          grossWithdrawal,
+          account.nonRegistered,
+          account.nonRegisteredCostBase,
+          context.rules.taxableAccounts.capitalGainsInclusionRate,
+        );
+        const previousTax = taxState.taxes;
+        const previousRecovery = taxState.oasRecoveryTax;
+
+        account.nonRegistered -= grossWithdrawal;
+        account.nonRegisteredCostBase = Math.max(
+          0,
+          account.nonRegisteredCostBase - breakdown.costBaseReduction,
+        );
+
+        if (account.nonRegistered <= 0.01) {
+          account.nonRegistered = 0;
+          account.nonRegisteredCostBase = 0;
+        }
+
+        taxableWithdrawals += grossWithdrawal;
+        realizedCapitalGains += Math.max(0, breakdown.realizedCapitalGain);
+        taxableCapitalGains += breakdown.taxableCapitalGain;
+        taxState.realizedCapitalGains += Math.max(0, breakdown.realizedCapitalGain);
+        taxState.taxableCapitalGains += breakdown.taxableCapitalGain;
+        taxState.taxableIncome += breakdown.taxableCapitalGain;
+
+        const updatedTaxEstimate = estimateIncomeTax({
+          taxableIncome: taxState.taxableIncome,
+          province: taxState.province,
+          calendarYear: period.calendarYear,
+          age: taxState.age,
+          eligiblePensionIncome: taxState.eligiblePensionIncome,
+        });
+
+        taxState.taxes = updatedTaxEstimate.totalTax;
+        taxState.marginalRate = clampRate(updatedTaxEstimate.marginalRate);
+        taxState.oasRecoveryTax = estimateOasRecoveryTax(
+          context,
+          period.calendarYear,
+          taxState.taxableIncome,
+          taxState.oasIncome,
+        );
+        taxState.warnings.push(...updatedTaxEstimate.warnings);
+
+        if (breakdown.ignoredCapitalLoss) {
+          warnings.push(
+            "A non-registered withdrawal realized a capital loss, but capital-loss carryforward logic is not yet modeled, so the taxable benefit of that loss was ignored.",
+          );
+        }
+
+        const netWithdrawal =
+          grossWithdrawal -
+          (taxState.taxes - previousTax) -
+          (taxState.oasRecoveryTax - previousRecovery);
+
+        netFromWithdrawals += netWithdrawal;
+        remainingGap -= netWithdrawal;
         break;
       }
       case "tfsa": {
@@ -1224,6 +1313,8 @@ function executeDrawdown(
     lifWithdrawals,
     tfsaWithdrawals,
     taxableWithdrawals,
+    realizedCapitalGains,
+    taxableCapitalGains,
     cashWithdrawals,
     netFromWithdrawals,
     remainingGap,
@@ -1405,6 +1496,7 @@ function applyContributions(
     account.rrsp += frame.rrspContribution;
     account.tfsa += frame.tfsaContribution;
     account.nonRegistered += frame.nonRegisteredContribution;
+    account.nonRegisteredCostBase += frame.nonRegisteredContribution;
 
     total +=
       frame.rrspContribution + frame.tfsaContribution + frame.nonRegisteredContribution;
@@ -1760,6 +1852,121 @@ function estimateNetFromRegisteredWithdrawal(
   );
 }
 
+function solveNonRegisteredWithdrawalForNetGap(
+  context: NormalizedContext,
+  calendarYear: number,
+  taxState: MemberTaxState,
+  targetNetGap: number,
+  availableBalance: number,
+  availableCostBase: number,
+): number {
+  const netFromMax = estimateNetFromNonRegisteredWithdrawal(
+    context,
+    calendarYear,
+    taxState,
+    availableBalance,
+    availableBalance,
+    availableCostBase,
+  );
+
+  if (netFromMax <= targetNetGap) {
+    return availableBalance;
+  }
+
+  let low = 0;
+  let high = availableBalance;
+
+  for (let iteration = 0; iteration < 24; iteration += 1) {
+    const mid = (low + high) / 2;
+    const net = estimateNetFromNonRegisteredWithdrawal(
+      context,
+      calendarYear,
+      taxState,
+      mid,
+      availableBalance,
+      availableCostBase,
+    );
+
+    if (net >= targetNetGap) {
+      high = mid;
+    } else {
+      low = mid;
+    }
+  }
+
+  return high;
+}
+
+function estimateNetFromNonRegisteredWithdrawal(
+  context: NormalizedContext,
+  calendarYear: number,
+  taxState: MemberTaxState,
+  grossWithdrawal: number,
+  availableBalance: number,
+  availableCostBase: number,
+): number {
+  const breakdown = calculateTaxableWithdrawalBreakdown(
+    grossWithdrawal,
+    availableBalance,
+    availableCostBase,
+    context.rules.taxableAccounts.capitalGainsInclusionRate,
+  );
+  const updatedTaxableIncome = taxState.taxableIncome + breakdown.taxableCapitalGain;
+  const updatedTax = estimateIncomeTax({
+    taxableIncome: updatedTaxableIncome,
+    province: taxState.province,
+    calendarYear,
+    age: taxState.age,
+    eligiblePensionIncome: taxState.eligiblePensionIncome,
+  }).totalTax;
+  const updatedOasRecovery = estimateOasRecoveryTax(
+    context,
+    calendarYear,
+    updatedTaxableIncome,
+    taxState.oasIncome,
+  );
+
+  return (
+    grossWithdrawal -
+    (updatedTax - taxState.taxes) -
+    (updatedOasRecovery - taxState.oasRecoveryTax)
+  );
+}
+
+function calculateTaxableWithdrawalBreakdown(
+  grossWithdrawal: number,
+  availableBalance: number,
+  availableCostBase: number,
+  inclusionRate: number,
+): TaxableWithdrawalBreakdown {
+  if (grossWithdrawal <= 0 || availableBalance <= 0) {
+    return {
+      costBaseReduction: 0,
+      realizedCapitalGain: 0,
+      taxableCapitalGain: 0,
+      ignoredCapitalLoss: false,
+    };
+  }
+
+  const normalizedWithdrawal = Math.min(grossWithdrawal, availableBalance);
+  const costBaseReduction = Math.min(
+    availableCostBase,
+    availableCostBase * (normalizedWithdrawal / availableBalance),
+  );
+  const realizedCapitalGain = normalizedWithdrawal - costBaseReduction;
+  const taxableCapitalGain =
+    realizedCapitalGain > 0
+      ? realizedCapitalGain * inclusionRate
+      : 0;
+
+  return {
+    costBaseReduction,
+    realizedCapitalGain,
+    taxableCapitalGain,
+    ignoredCapitalLoss: realizedCapitalGain < -0.01,
+  };
+}
+
 function resolveCppOrQppAnnualIncome(
   context: NormalizedContext,
   member: HouseholdMemberInput,
@@ -2043,6 +2250,30 @@ function buildYearWarnings(
         "Locked-in account logic is now baseline-supported, but institution-calculated annual maximums should override the fallback path when available.",
       );
     }
+
+    if (
+      frame.member.accounts.nonRegistered > 0 &&
+      frame.member.taxableAccountTaxProfile?.nonRegisteredAdjustedCostBase === undefined
+    ) {
+      warnings.push(
+        "Non-registered adjusted cost base was not provided. Taxable-account withdrawals currently assume the opening market value is the book cost until user-entered ACB is supplied.",
+      );
+    }
+
+    if (
+      (frame.member.taxableAccountTaxProfile?.nonRegisteredAdjustedCostBase ?? 0) >
+      frame.member.accounts.nonRegistered + 0.01
+    ) {
+      warnings.push(
+        "Non-registered adjusted cost base exceeds the current market value. Capital-loss carryforwards are not yet modeled, so loss-heavy taxable drawdown cases remain approximate.",
+      );
+    }
+
+    if ((frame.member.taxableAccountTaxProfile?.annualInterestIncome ?? 0) > 0) {
+      warnings.push(
+        "Standalone taxable-account interest income is not yet modeled separately from portfolio growth. Keep that amount in other planned income until the return-character engine is added.",
+      );
+    }
   }
 
   return warnings;
@@ -2082,6 +2313,7 @@ function buildAssumptionList(context: NormalizedContext): string[] {
     "OAS recovery tax is estimated with prior-year threshold mapping and capped by modeled OAS income.",
     "Drawdown currently supports a practical blended heuristic, not full optimization.",
     "Locked-in accounts now support baseline LIRA-to-LIF conversion, RRIF-style minimums, and jurisdiction-aware fallback maximums, with manual annual overrides preferred when available.",
+    "Non-registered withdrawals now track adjusted cost base and realize taxable capital gains using the baseline Canadian inclusion rate, but dividend, interest, and capital-loss carryforward character remains incomplete.",
     "Pension splitting currently uses an annual household heuristic on planned eligible pension income before discretionary registered drawdown.",
     "Immigrant and partial-benefit support is modeled through statement, manual, residence-year, and foreign-pension inputs.",
   ];
@@ -2169,12 +2401,22 @@ function sumAccountLedger(account: AccountLedger): number {
   );
 }
 
-function toAccountLedger(accounts: InvestmentAccountBalances): AccountLedger {
+function toAccountLedger(member: HouseholdMemberInput): AccountLedger {
+  const accounts = member.accounts;
+
   return {
     rrsp: accounts.rrsp,
     rrif: accounts.rrif,
     tfsa: accounts.tfsa,
     nonRegistered: accounts.nonRegistered,
+    nonRegisteredCostBase:
+      accounts.nonRegistered > 0
+        ? Math.max(
+            0,
+            member.taxableAccountTaxProfile?.nonRegisteredAdjustedCostBase ??
+              accounts.nonRegistered,
+          )
+        : 0,
     cash: accounts.cash ?? 0,
     lira: accounts.lira ?? 0,
     lif: accounts.lif ?? 0,
@@ -2214,6 +2456,7 @@ function roundAccountRecord(account: AccountLedger): Record<string, number> {
     rrif: roundCurrency(account.rrif),
     tfsa: roundCurrency(account.tfsa),
     nonRegistered: roundCurrency(account.nonRegistered),
+    nonRegisteredAdjustedCostBase: roundCurrency(account.nonRegisteredCostBase),
     cash: roundCurrency(account.cash),
     lira: roundCurrency(account.lira),
     lif: roundCurrency(account.lif),

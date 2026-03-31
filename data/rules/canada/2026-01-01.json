@@ -56,6 +56,16 @@
       "label": "Retraite Quebec - Calculs Express for an FRV and a locked-in retirement account",
       "url": "https://www.rrq.gouv.qc.ca/en/services/services_en_ligne/calculs_express/Pages/calculs_express.aspx",
       "accessedOn": "2026-03-31"
+    },
+    {
+      "label": "CRA - Definitions for capital gains",
+      "url": "https://www.canada.ca/en/revenue-agency/services/tax/individuals/topics/about-your-tax-return/tax-return/completing-a-tax-return/personal-income/line-12700-capital-gains/definitions-capital-gains.html",
+      "accessedOn": "2026-03-31"
+    },
+    {
+      "label": "CRA - Capital Gains 2025",
+      "url": "https://www.canada.ca/en/revenue-agency/services/forms-publications/publications/t4037/capital-gains.html",
+      "accessedOn": "2026-03-31"
     }
   ],
   "cpp": {
@@ -240,5 +250,12 @@
   "registeredAccounts": {
     "tfsaAnnualLimit": 7000,
     "rrspAnnualLimit": 33810
+  },
+  "taxableAccounts": {
+    "capitalGainsInclusionRate": 0.5,
+    "notes": [
+      "Baseline taxable-account drawdown uses a 50% capital-gains inclusion rate on realized gains.",
+      "The engine does not yet model any proposed higher inclusion regime for large 2026+ gains."
+    ]
   }
 }

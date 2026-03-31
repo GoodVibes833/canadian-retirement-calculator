@@ -381,6 +381,73 @@ const taxChecks = [
       );
     },
   },
+  {
+    id: "T10",
+    label: "Taxable-account withdrawals realize capital gains when ACB is below market value",
+    check() {
+      const gainInput = readJson(
+        "data/fixtures/taxable-account/on-taxable-acb-gain.json",
+      );
+      const flatAcbInput = readJson(
+        "data/fixtures/taxable-account/on-taxable-acb-gain.json",
+      );
+      flatAcbInput.household.primary.taxableAccountTaxProfile.nonRegisteredAdjustedCostBase =
+        flatAcbInput.household.primary.accounts.nonRegistered;
+
+      const gainResult = simulateRetirementPlan(gainInput, rules);
+      const flatAcbResult = simulateRetirementPlan(flatAcbInput, rules);
+      const gainYear = gainResult.years[0];
+      const flatYear = flatAcbResult.years[0];
+
+      assert(
+        gainYear.taxableWithdrawals > 0,
+        "Taxable-account gain scenario should draw from the non-registered account.",
+      );
+      assert(
+        gainYear.realizedCapitalGains > 0,
+        "ACB-below-market scenario should realize a capital gain.",
+      );
+      assert(
+        gainYear.taxableCapitalGains > 0,
+        "ACB-below-market scenario should add taxable capital gains.",
+      );
+      assert(
+        gainYear.taxes > flatYear.taxes,
+        "Realized capital gains should increase first-year tax versus a flat-ACB scenario.",
+      );
+      assert(
+        gainYear.endOfYearAccountBalances.primary.nonRegisteredAdjustedCostBase <
+          gainInput.household.primary.taxableAccountTaxProfile.nonRegisteredAdjustedCostBase,
+        "Taxable-account ACB should roll down after a partial withdrawal.",
+      );
+    },
+  },
+  {
+    id: "T11",
+    label: "Missing taxable-account ACB falls back to market value with a warning",
+    check() {
+      const input = readJson(
+        "data/fixtures/taxable-account/on-taxable-missing-acb.json",
+      );
+      const result = simulateRetirementPlan(input, rules);
+      const firstYear = result.years[0];
+
+      assert(
+        firstYear.taxableWithdrawals > 0,
+        "Missing-ACB scenario should still draw from the taxable account.",
+      );
+      assert(
+        firstYear.taxableCapitalGains === 0,
+        "Without an explicit ACB, the baseline fallback should treat opening market value as book cost.",
+      );
+      assert(
+        firstYear.warnings.some((warning) =>
+          warning.includes("adjusted cost base was not provided"),
+        ),
+        "Missing-ACB scenario should surface an adjusted-cost-base warning.",
+      );
+    },
+  },
 ];
 
 for (const check of taxChecks) {

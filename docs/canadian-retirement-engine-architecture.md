@@ -118,7 +118,8 @@ Responsibilities:
 - age amount,
 - pension splitting,
 - OAS recovery tax,
-- later taxable-account character treatment.
+- baseline taxable-account ACB and realized capital-gain treatment,
+- later dividend, interest, and capital-loss carryforward treatment.
 
 ### 5.6 Reporting Module
 
@@ -154,6 +155,7 @@ The scaffold is intentionally incomplete in these areas:
 
 - taxes now use a 2026 federal and province-aware scaffold for ON, BC, AB, and QC, including basic personal, age, and pension-income credits for federal / ON / BC / AB and a partial Quebec path,
 - RRIF minimum withdrawals are modeled, and locked-in accounts now support baseline LIRA-to-LIF conversion plus ON / BC / AB fallback LIF guardrails with Quebec warning-heavy partial support,
+- non-registered withdrawals now track adjusted cost base and realize taxable capital gains using the ruleset inclusion rate, but still warn heavily when ACB is missing and do not yet model dividend / interest character or capital-loss carryforwards,
 - GIS is not calculated,
 - pension splitting now uses an annual heuristic on planned eligible pension income before discretionary drawdown, not a full lifetime optimization,
 - spouse-aware survivor logic now includes a baseline spousal asset rollover and defined-benefit survivor continuation, but still omits CPP survivor pension and estate-tax effects,
@@ -165,7 +167,7 @@ The scaffold is intentionally incomplete in these areas:
 Recommended order from here:
 
 1. Replace locked-in fallback maximums with more exact institution-style annual calculations and fuller Alberta / BC formulas.
-2. Add taxable-account character treatment for non-registered withdrawals.
+2. Deepen taxable-account character treatment for interest, dividends, and capital-loss handling.
 3. Deepen Quebec-specific QPP, FRV, and tax-path behavior.
 4. Add GIS and Allowance.
 5. Add fuller survivor modeling including CPP survivor pension and death-year tax handling.

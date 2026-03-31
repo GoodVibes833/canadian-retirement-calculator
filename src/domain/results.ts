@@ -18,6 +18,8 @@ export interface ProjectionYear {
   lifWithdrawals: number;
   tfsaWithdrawals: number;
   taxableWithdrawals: number;
+  realizedCapitalGains: number;
+  taxableCapitalGains: number;
   cashWithdrawals: number;
   endOfYearAccountBalances: {
     primary: Record<string, number>;

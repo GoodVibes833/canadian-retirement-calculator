@@ -74,6 +74,11 @@ export interface RegisteredAccountLimits {
   rrspAnnualLimit: number;
 }
 
+export interface TaxableAccountRuleSet {
+  capitalGainsInclusionRate: number;
+  notes: string[];
+}
+
 export type LockedInJurisdictionRuleCode =
   | "AB"
   | "BC"
@@ -108,4 +113,5 @@ export interface CanadaRuleSet {
   rrif: RrifRuleSet;
   lockedIn: LockedInRuleSet;
   registeredAccounts: RegisteredAccountLimits;
+  taxableAccounts: TaxableAccountRuleSet;
 }

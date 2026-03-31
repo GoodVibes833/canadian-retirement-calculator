@@ -91,6 +91,12 @@ export interface LockedInAccountPolicy {
   notes?: string;
 }
 
+export interface TaxableAccountTaxProfile {
+  nonRegisteredAdjustedCostBase?: number;
+  annualInterestIncome?: number;
+  notes?: string;
+}
+
 export interface InvestmentAccountBalances {
   rrsp: number;
   rrif: number;
@@ -149,6 +155,7 @@ export interface HouseholdMemberInput {
   publicBenefits: PublicBenefitInput;
   definedBenefitPension?: DefinedBenefitPensionInput;
   lockedInAccountPolicy?: LockedInAccountPolicy;
+  taxableAccountTaxProfile?: TaxableAccountTaxProfile;
   accounts: InvestmentAccountBalances;
   contributions: AnnualContributionPlan;
   annuityIncome?: ScheduledCashFlow[];
