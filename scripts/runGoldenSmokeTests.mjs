@@ -690,6 +690,13 @@ const taxChecks = [
         "Provincial foreign tax credit should reduce the modeled provincial tax payable.",
       );
       assert(
+        Math.abs(
+          withoutCredit.provincialTax -
+            (withCredit.provincialTax + withCredit.provincialForeignTaxCredit),
+        ) < 0.01,
+        "Returned provincial tax should already be net of the modeled provincial foreign tax credit.",
+      );
+      assert(
         withCredit.warnings.some((warning) =>
           warning.includes("ON / BC / AB provincial residual-credit approximation"),
         ),
@@ -720,6 +727,14 @@ const taxChecks = [
       assert(
         creditedYear.otherPlannedIncome === baseYear.otherPlannedIncome,
         "Foreign tax credit should change taxes, not cash income itself.",
+      );
+      assert(
+        creditedYear.federalForeignTaxCredit > 0,
+        "Household result should surface the federal foreign tax credit in the annual breakdown.",
+      );
+      assert(
+        creditedYear.provincialForeignTaxCredit > 0,
+        "Household result should surface the provincial foreign tax credit in the annual breakdown.",
       );
       assert(
         creditedYear.warnings.some((warning) =>

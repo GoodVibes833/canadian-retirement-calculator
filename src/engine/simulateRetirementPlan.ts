@@ -97,6 +97,8 @@ interface MemberTaxState {
   taxableIncome: number;
   taxes: number;
   oasRecoveryTax: number;
+  federalForeignTaxCredit: number;
+  provincialForeignTaxCredit: number;
   marginalRate: number;
   province: ProvinceCode;
   oasIncome: number;
@@ -418,6 +420,15 @@ function projectSingleYear(
       ),
       taxes: roundCurrency(taxes),
       oasRecoveryTax: roundCurrency(oasRecoveryTax),
+      federalForeignTaxCredit: roundCurrency(
+        sumMemberTaxState(memberTaxState, (state) => state.federalForeignTaxCredit),
+      ),
+      provincialForeignTaxCredit: roundCurrency(
+        sumMemberTaxState(
+          memberTaxState,
+          (state) => state.provincialForeignTaxCredit,
+        ),
+      ),
       cppQppIncome: roundCurrency(
         sumMemberFrames(memberFrames, (frame) => frame.cppQppIncome),
       ),
@@ -967,6 +978,8 @@ function buildBaseTaxState(
       taxableIncome: ordinaryTaxableIncome,
       taxes: 0,
       oasRecoveryTax: 0,
+      federalForeignTaxCredit: 0,
+      provincialForeignTaxCredit: 0,
       marginalRate: 0,
       province: frame.province,
       oasIncome: frame.oasIncome,
@@ -1081,6 +1094,8 @@ function refreshMemberTaxState(
   });
 
   memberState.taxes = taxEstimate.totalTax;
+  memberState.federalForeignTaxCredit = taxEstimate.federalForeignTaxCredit;
+  memberState.provincialForeignTaxCredit = taxEstimate.provincialForeignTaxCredit;
   memberState.marginalRate = clampRate(taxEstimate.marginalRate);
   memberState.oasRecoveryTax = estimateOasRecoveryTax(
     context,
