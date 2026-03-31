@@ -1191,6 +1191,66 @@ const taxChecks = [
       );
     },
   },
+  {
+    id: "T35",
+    label: "Death year prorates working-age household income and spending",
+    check() {
+      const fullYearInput = readJson("data/fixtures/golden/golden-on-couple-core.json");
+      const deathYearInput = readJson("data/fixtures/golden/golden-on-couple-core.json");
+      fullYearInput.household.partner.profile.lifeExpectancy = 64;
+      deathYearInput.household.partner.profile.lifeExpectancy = 63;
+
+      const fullYearResult = simulateRetirementPlan(fullYearInput, rules);
+      const deathYearResult = simulateRetirementPlan(deathYearInput, rules);
+      const fullYear = byPrimaryAge(fullYearResult, 65);
+      const deathYear = byPrimaryAge(deathYearResult, 65);
+
+      assert(
+        deathYear.beforeTaxIncome < fullYear.beforeTaxIncome,
+        "Death-year handling should reduce modeled before-tax income when one spouse dies mid-year.",
+      );
+      assert(
+        deathYear.spending < fullYear.spending,
+        "Death-year handling should reduce couple spending partway toward the survivor path in the death year.",
+      );
+      assert(
+        deathYear.warnings.some((warning) =>
+          warning.includes("mid-year death heuristic"),
+        ),
+        "Death-year scenario should warn that the death year uses a mid-year heuristic.",
+      );
+    },
+  },
+  {
+    id: "T36",
+    label: "Death year prorates mandatory RRIF withdrawals for a retiree couple",
+    check() {
+      const fullYearInput = readJson("data/fixtures/golden/golden-on-rrif-couple.json");
+      const deathYearInput = readJson("data/fixtures/golden/golden-on-rrif-couple.json");
+      fullYearInput.household.primary.profile.lifeExpectancy = 73;
+      deathYearInput.household.primary.profile.lifeExpectancy = 72;
+
+      const fullYearResult = simulateRetirementPlan(fullYearInput, rules);
+      const deathYearResult = simulateRetirementPlan(deathYearInput, rules);
+      const fullYear = fullYearResult.years[0];
+      const deathYear = deathYearResult.years[0];
+
+      assert(
+        deathYear.rrspRrifWithdrawals < fullYear.rrspRrifWithdrawals,
+        "Death-year handling should reduce the modeled mandatory RRIF withdrawal when death occurs mid-year.",
+      );
+      assert(
+        deathYear.beforeTaxIncome < fullYear.beforeTaxIncome,
+        "Death-year handling should lower before-tax income for the partial final year.",
+      );
+      assert(
+        deathYear.warnings.some((warning) =>
+          warning.includes("mid-year death heuristic"),
+        ),
+        "Retiree death-year scenario should warn that the death year uses a mid-year heuristic.",
+      );
+    },
+  },
 ];
 
 for (const check of taxChecks) {

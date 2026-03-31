@@ -65,6 +65,8 @@ interface MemberFrame {
   age: number;
   province: ProvinceCode;
   isAlive: boolean;
+  deathOccursThisYear: boolean;
+  yearFraction: number;
   isRetired: boolean;
   employmentIncome: number;
   rrspContribution: number;
@@ -554,6 +556,22 @@ function initializeHouseholdTaxAttributeLedger(
   };
 }
 
+function resolveMemberYearFraction(
+  member: HouseholdMemberInput,
+  age: number,
+  enableDeathYearProration: boolean,
+): number {
+  if (age > member.profile.lifeExpectancy) {
+    return 0;
+  }
+
+  if (enableDeathYearProration && age === member.profile.lifeExpectancy) {
+    return 0.5;
+  }
+
+  return 1;
+}
+
 function buildMemberFrames(
   context: NormalizedContext,
   period: PeriodState,
@@ -563,8 +581,39 @@ function buildMemberFrames(
 
   return getMemberEntries(context.input).map(({ slot, member }) => {
     const age = slot === "primary" ? period.primaryAge : period.partnerAge ?? 0;
-    const isAlive = age <= member.profile.lifeExpectancy;
+    const yearFraction = resolveMemberYearFraction(
+      member,
+      age,
+      context.input.household.householdType !== "single",
+    );
+    const isAlive = yearFraction > 0;
+    const deathOccursThisYear = yearFraction > 0 && yearFraction < 1;
     const isRetired = age >= member.profile.retirementAge;
+    const employmentIncome =
+      estimateEmploymentIncome(member, age, yearsFromStart) * yearFraction;
+    const annuityIncome =
+      estimateScheduledCashFlowTotal(member.annuityIncome, age) * yearFraction;
+    const rentalIncome =
+      estimateScheduledCashFlowTotal(member.rentalIncome, age) * yearFraction;
+    const foreignPensionIncome =
+      estimateScheduledCashFlowTotal(member.foreignPensionIncome, age) * yearFraction;
+    const taxableInterestIncome =
+      (member.taxableAccountTaxProfile?.annualInterestIncome ?? 0) * yearFraction;
+    const eligibleDividendIncome =
+      (member.taxableAccountTaxProfile?.annualEligibleDividendIncome ?? 0) *
+      yearFraction;
+    const nonEligibleDividendIncome =
+      (member.taxableAccountTaxProfile?.annualNonEligibleDividendIncome ?? 0) *
+      yearFraction;
+    const foreignDividendIncome =
+      (member.taxableAccountTaxProfile?.annualForeignDividendIncome ?? 0) *
+      yearFraction;
+    const foreignNonBusinessIncomeTaxPaid =
+      (member.taxableAccountTaxProfile?.annualForeignNonBusinessIncomeTaxPaid ?? 0) *
+      yearFraction;
+    const returnOfCapitalDistribution =
+      (member.taxableAccountTaxProfile?.annualReturnOfCapitalDistribution ?? 0) *
+      yearFraction;
 
     return {
       slot,
@@ -572,49 +621,43 @@ function buildMemberFrames(
       age,
       province: member.profile.provinceAtRetirement,
       isAlive,
+      deathOccursThisYear,
+      yearFraction,
       isRetired,
-      employmentIncome: estimateEmploymentIncome(member, age, yearsFromStart),
+      employmentIncome,
       rrspContribution: estimateContribution(
         member.contributions.rrsp,
         member.contributions.contributionEscalationRate,
         yearsFromStart,
         isAlive && !isRetired,
-      ),
+      ) * yearFraction,
       tfsaContribution: estimateContribution(
         member.contributions.tfsa,
         member.contributions.contributionEscalationRate,
         yearsFromStart,
         isAlive && !isRetired,
-      ),
+      ) * yearFraction,
       nonRegisteredContribution: estimateContribution(
         member.contributions.nonRegistered,
         member.contributions.contributionEscalationRate,
         yearsFromStart,
         isAlive && !isRetired,
-      ),
-      cppQppIncome: estimateCppOrQppIncome(context, member, age, isAlive),
-      oasIncome: estimateOasIncome(context, member, age, isAlive),
-      dbPensionIncome: estimateDbPensionIncome(member, age, isAlive),
-      annuityIncome: estimateScheduledCashFlowTotal(member.annuityIncome, age),
-      rentalIncome: estimateScheduledCashFlowTotal(member.rentalIncome, age),
-      foreignPensionIncome: estimateScheduledCashFlowTotal(
-        member.foreignPensionIncome,
-        age,
-      ),
-      taxableInterestIncome: member.taxableAccountTaxProfile?.annualInterestIncome ?? 0,
-      eligibleDividendIncome:
-        member.taxableAccountTaxProfile?.annualEligibleDividendIncome ?? 0,
-      nonEligibleDividendIncome:
-        member.taxableAccountTaxProfile?.annualNonEligibleDividendIncome ?? 0,
-      foreignDividendIncome:
-        member.taxableAccountTaxProfile?.annualForeignDividendIncome ?? 0,
-      foreignNonBusinessIncomeTaxPaid:
-        member.taxableAccountTaxProfile?.annualForeignNonBusinessIncomeTaxPaid ?? 0,
-      returnOfCapitalDistribution:
-        member.taxableAccountTaxProfile?.annualReturnOfCapitalDistribution ?? 0,
+      ) * yearFraction,
+      cppQppIncome: estimateCppOrQppIncome(context, member, age, isAlive) * yearFraction,
+      oasIncome: estimateOasIncome(context, member, age, isAlive) * yearFraction,
+      dbPensionIncome: estimateDbPensionIncome(member, age, isAlive) * yearFraction,
+      annuityIncome,
+      rentalIncome,
+      foreignPensionIncome,
+      taxableInterestIncome,
+      eligibleDividendIncome,
+      nonEligibleDividendIncome,
+      foreignDividendIncome,
+      foreignNonBusinessIncomeTaxPaid,
+      returnOfCapitalDistribution,
       deemedCapitalGainFromReturnOfCapital: 0,
       taxableCapitalGainFromReturnOfCapital: 0,
-      otherPlannedIncome: estimateOtherPlannedIncome(member, age, isAlive),
+      otherPlannedIncome: estimateOtherPlannedIncome(member, age, isAlive) * yearFraction,
     };
   });
 }
@@ -1050,10 +1093,14 @@ function applyMandatoryMinimumWithdrawals(
     }
 
     const account = getAccountLedgerBySlot(balances, frame.slot);
+    const deathYearProrationFactor = frame.deathOccursThisYear ? 0.5 : 1;
 
     if (frame.age >= 71 && account.rrif > 0) {
       const factor = getRrifMinimumFactor(context.rules, frame.age);
-      const minimumWithdrawal = Math.min(account.rrif, account.rrif * factor);
+      const minimumWithdrawal = Math.min(
+        account.rrif,
+        account.rrif * factor * deathYearProrationFactor,
+      );
 
       if (minimumWithdrawal > 0) {
         account.rrif -= minimumWithdrawal;
@@ -1073,7 +1120,7 @@ function applyMandatoryMinimumWithdrawals(
 
     const lifMinimumWithdrawal = Math.min(
       account.lif,
-      lockedInLimit.minimumWithdrawal,
+      lockedInLimit.minimumWithdrawal * deathYearProrationFactor,
       lockedInLimit.maximumWithdrawal,
     );
 
@@ -2618,15 +2665,29 @@ function estimateSpending(
     expenseProfile.desiredAfterTaxSpending *
     Math.pow(1 + inflationRate, inflationYears);
   const livingMembers = memberFrames.filter((frame) => frame.isAlive).length;
+  const deathYearCount = memberFrames.filter(
+    (frame) => frame.deathOccursThisYear,
+  ).length;
+  const survivorSpendingPercent = clampRate(
+    expenseProfile.survivorSpendingPercentOfCouple ?? 0.72,
+  );
 
   if (livingMembers === 0) {
     return 0;
   }
 
   if (context.input.household.householdType !== "single" && livingMembers === 1) {
-    spending *= clampRate(
-      expenseProfile.survivorSpendingPercentOfCouple ?? 0.72,
-    );
+    spending *= survivorSpendingPercent;
+  } else if (
+    context.input.household.householdType !== "single" &&
+    deathYearCount === 1
+  ) {
+    spending *= (1 + survivorSpendingPercent) / 2;
+  } else if (
+    context.input.household.householdType !== "single" &&
+    deathYearCount >= 2
+  ) {
+    spending *= 0.5;
   }
 
   return spending;
@@ -3247,6 +3308,12 @@ function buildYearWarnings(
     }
   }
 
+  if (memberFrames.some((frame) => frame.deathOccursThisYear)) {
+    warnings.push(
+      "Death-year cash flow uses a baseline mid-year death heuristic. Recurring income, contributions, and mandatory withdrawals are prorated to 50%, and couple spending transitions halfway toward the survivor path for that year.",
+    );
+  }
+
   for (const frame of memberFrames) {
     const benefits = frame.member.publicBenefits;
     const residenceYears =
@@ -3386,6 +3453,7 @@ function buildAssumptionList(context: NormalizedContext): string[] {
     "GIS / Allowance now use a baseline current-year income proxy with a work-income exemption and published annual cutoffs, but exact prior-year Service Canada reassessment timing and quarterly SG3-3 tables are not yet replicated.",
     "Survivor years now include baseline CPP/QPP survivor-pension support when the surviving spouse is not already on a combined public-pension path or when a manual annual survivor-benefit override is supplied, but full Service Canada / Retraite Quebec combined-benefit math remains incomplete.",
     "Survivor-year spending defaults to 72% of the couple after-tax spending target unless expenseProfile.survivorSpendingPercentOfCouple is explicitly provided.",
+    "Death years use a baseline mid-year heuristic: recurring income, contributions, and mandatory RRIF/LIF withdrawals are prorated to 50%, and couple spending transitions halfway toward the survivor spending path for that year.",
   ];
 }
 
