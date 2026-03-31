@@ -163,7 +163,7 @@ The scaffold is intentionally incomplete in these areas:
 - non-registered withdrawals now track adjusted cost base and realize taxable capital gains using the ruleset inclusion rate, while explicit taxable-account interest, foreign dividends, Canadian eligible / non-eligible dividends, and return-of-capital cash distributions can be modeled annually; return-of-capital distributions also reduce modeled non-registered market value, and baseline federal plus ON / BC / AB / QC provincial residual-credit foreign-tax-credit approximations are now supported alongside same-year and carryforward net-capital-loss handling, while fuller Quebec form-level and multi-country foreign tax credit detail remain incomplete,
 - GIS / Allowance now use a baseline current-year income proxy with the published 2026 maximums and income cutoffs, plus the work-income exemption; survivor Allowance requires an explicit eligibility flag, and exact prior-year Service Canada reassessment timing and quarterly SG3-3 table detail remain incomplete,
 - pension splitting now uses an annual heuristic on planned eligible pension income before discretionary drawdown, not a full lifetime optimization,
-- spouse-aware survivor logic now includes a baseline spousal asset rollover and defined-benefit survivor continuation, but still omits CPP survivor pension and estate-tax effects,
+- spouse-aware survivor logic now includes a baseline spousal asset rollover, defined-benefit survivor continuation, and partial CPP / QPP survivor-pension support, but full combined-benefit math, estate-tax effects, and probate handling remain incomplete,
 - custom withdrawal order now supports supported account tokens and then falls back to the blended default path,
 - QPP delayed-start increases are now baseline-supported through age 72, while early-start reductions still use a set-proportion approximation unless the user enters a manual start-age amount.
 
@@ -174,7 +174,7 @@ Recommended order from here:
 1. Replace locked-in fallback maximums with more exact institution-style annual calculations and fuller Alberta / BC formulas.
 2. Deepen Quebec-specific FRV and tax-path behavior, including more exact early-start QPP reduction handling, living-alone and richer Schedule B detail, fuller Quebec form-level foreign tax credit detail, and more exact institution-level FRV temporary-income handling.
 3. Deepen GIS / Allowance with prior-year reassessment logic, exact quarterly SG3-3 table behavior, and more detailed widowhood / low-income edge cases.
-4. Add fuller survivor modeling including CPP survivor pension and death-year tax handling.
+4. Add fuller survivor modeling including death-year tax handling, probate effects, and more exact CPP / QPP combined-benefit behavior.
 5. Add more exact multi-country and treaty-aware foreign tax credit handling.
 6. Add Monte Carlo.
 

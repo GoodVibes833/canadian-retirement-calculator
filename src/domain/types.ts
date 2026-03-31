@@ -30,6 +30,10 @@ export type CppQppEstimateMode =
 export type OasEstimateMode =
   | "residence-years"
   | "manual-at-start-age";
+export type SurvivorBenefitEstimateMode =
+  | "automatic"
+  | "manual-annual"
+  | "disabled";
 export type WithdrawalOrder =
   | "taxable-first"
   | "rrsp-rrif-first"
@@ -67,6 +71,10 @@ export interface PublicBenefitInput {
   oasStartAge: number;
   oasEligible?: boolean;
   oasResidenceYearsOverride?: number;
+  survivorBenefitEstimateMode?: SurvivorBenefitEstimateMode;
+  manualAnnualSurvivorBenefit?: number;
+  survivorHasDependentChildren?: boolean;
+  survivorIsDisabled?: boolean;
   allowanceSurvivorEligible?: boolean;
   immigrationAgeToCanada?: number;
   hasSocialSecurityAgreementCountry?: boolean;

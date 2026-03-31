@@ -313,7 +313,7 @@ function projectSingleYear(
   const taxAttributes = cloneHouseholdTaxAttributeLedger(openingTaxAttributes);
   const warnings: string[] = [];
   const memberFrames = buildMemberFrames(context, period);
-  applySurvivorAdjustments(memberFrames, balances, warnings);
+  applySurvivorAdjustments(context, memberFrames, balances, warnings);
   applyAnnualTaxableAccountDistributions(
     context,
     memberFrames,
@@ -620,6 +620,7 @@ function buildMemberFrames(
 }
 
 function applySurvivorAdjustments(
+  context: NormalizedContext,
   memberFrames: MemberFrame[],
   balances: HouseholdLedger,
   warnings: string[],
@@ -679,6 +680,17 @@ function applySurvivorAdjustments(
         survivorContinuationIncome,
       )} was applied for ${labelForSlot(survivor.slot).toLowerCase()}.`,
     );
+  }
+
+  const survivorPublicPensionIncome = estimatePublicPensionSurvivorIncome(
+    context,
+    survivor,
+    deceased,
+    warnings,
+  );
+
+  if (survivorPublicPensionIncome > 0) {
+    survivor.otherPlannedIncome += survivorPublicPensionIncome;
   }
 }
 
@@ -2396,6 +2408,162 @@ function estimateDbSurvivorContinuationIncome(
   );
 }
 
+function estimatePublicPensionSurvivorIncome(
+  context: NormalizedContext,
+  survivor: MemberFrame,
+  deceased: MemberFrame,
+  warnings: string[],
+): number {
+  const survivorBenefitMode =
+    survivor.member.publicBenefits.survivorBenefitEstimateMode ?? "automatic";
+
+  if (survivorBenefitMode === "disabled") {
+    return 0;
+  }
+
+  if (
+    survivorBenefitMode === "manual-annual" &&
+    survivor.member.publicBenefits.manualAnnualSurvivorBenefit !== undefined
+  ) {
+    warnings.push(
+      `${labelForSlot(
+        survivor.slot,
+      )} survivor years are using a manual annual CPP/QPP survivor benefit override.`,
+    );
+    return Math.max(0, survivor.member.publicBenefits.manualAnnualSurvivorBenefit);
+  }
+
+  if (survivor.member.profile.pensionPlan === "QPP") {
+    return estimateQppSurvivorIncome(context, survivor, deceased, warnings);
+  }
+
+  return estimateCppSurvivorIncome(context, survivor, deceased, warnings);
+}
+
+function estimateCppSurvivorIncome(
+  context: NormalizedContext,
+  survivor: MemberFrame,
+  deceased: MemberFrame,
+  warnings: string[],
+): number {
+  const deceasedMonthlyAmountAt65 = resolveMonthlyBenefitAt65(
+    context,
+    deceased.member,
+  );
+
+  if (deceasedMonthlyAmountAt65 <= 0) {
+    return 0;
+  }
+
+  const survivorOwnMonthlyRetirement = survivor.cppQppIncome / 12;
+  let monthlySurvivorBenefit = 0;
+
+  if (survivor.age >= 65) {
+    const standaloneMonthlySurvivorBenefit = Math.min(
+      context.rules.cpp.survivorMaximumMonthlyAge65Plus,
+      deceasedMonthlyAmountAt65 * 0.6,
+    );
+
+    if (survivorOwnMonthlyRetirement > 0) {
+      monthlySurvivorBenefit = Math.max(
+        0,
+        Math.min(
+          standaloneMonthlySurvivorBenefit,
+          context.rules.cpp.combinedRetirementSurvivorMaximumMonthlyAt65 -
+            survivorOwnMonthlyRetirement,
+        ),
+      );
+      warnings.push(
+        "CPP survivor pension for a survivor already receiving CPP retirement was combined using the published age-65 combined maximum as a baseline cap. Exact Service Canada combined-benefit math and enhancement detail remain partial.",
+      );
+    } else {
+      monthlySurvivorBenefit = standaloneMonthlySurvivorBenefit;
+    }
+  } else {
+    if (survivorOwnMonthlyRetirement > 0) {
+      warnings.push(
+        "CPP survivor pension under age 65 is not automatically modeled when the survivor is already receiving a CPP retirement pension. Use a manual annual survivor-benefit input for this case.",
+      );
+      return 0;
+    }
+
+    monthlySurvivorBenefit = Math.min(
+      context.rules.cpp.survivorMaximumMonthlyUnder65,
+      context.rules.cpp.survivorUnder65FlatRateMonthly +
+        deceasedMonthlyAmountAt65 * 0.375,
+    );
+  }
+
+  if (monthlySurvivorBenefit <= 0) {
+    return 0;
+  }
+
+  warnings.push(
+    `CPP survivor pension of ${roundCurrency(
+      monthlySurvivorBenefit * 12,
+    )} was added for ${labelForSlot(survivor.slot).toLowerCase()} after ${labelForSlot(
+      deceased.slot,
+    ).toLowerCase()}'s modeled death.`,
+  );
+
+  return monthlySurvivorBenefit * 12;
+}
+
+function estimateQppSurvivorIncome(
+  context: NormalizedContext,
+  survivor: MemberFrame,
+  deceased: MemberFrame,
+  warnings: string[],
+): number {
+  const deceasedMonthlyAmountAt65 = resolveMonthlyBenefitAt65(
+    context,
+    deceased.member,
+  );
+
+  if (deceasedMonthlyAmountAt65 <= 0) {
+    return 0;
+  }
+
+  if (survivor.cppQppIncome > 0) {
+    warnings.push(
+      "QPP survivor pension is not automatically modeled when the survivor is already receiving a QPP retirement pension. Use a manual annual survivor-benefit input for this case.",
+    );
+    return 0;
+  }
+
+  const entitlementRatio = clampRate(
+    deceasedMonthlyAmountAt65 / context.rules.qpp.maxMonthlyRetirementAt65,
+  );
+  let monthlyCap = context.rules.qpp.survivorMaximumMonthlyAge65PlusNoRetirement;
+
+  if (survivor.age < 45) {
+    if (survivor.member.publicBenefits.survivorIsDisabled) {
+      monthlyCap = context.rules.qpp.survivorMaximumMonthlyUnder45Disabled;
+    } else if (survivor.member.publicBenefits.survivorHasDependentChildren) {
+      monthlyCap = context.rules.qpp.survivorMaximumMonthlyUnder45WithChildren;
+    } else {
+      monthlyCap = context.rules.qpp.survivorMaximumMonthlyUnder45NoChildren;
+      warnings.push(
+        "QPP survivor pension for a survivor under age 45 defaulted to the no-children / not-disabled maximum because no dependent-child or disability flag was supplied.",
+      );
+    }
+  } else if (survivor.age < 65) {
+    monthlyCap = context.rules.qpp.survivorMaximumMonthly45To64;
+  }
+
+  const annualBenefit = monthlyCap * entitlementRatio * 12;
+
+  warnings.push(
+    `QPP survivor pension of ${roundCurrency(
+      annualBenefit,
+    )} was added for ${labelForSlot(survivor.slot).toLowerCase()} after ${labelForSlot(
+      deceased.slot,
+    ).toLowerCase()}'s modeled death. This path scales the published 2026 survivor maximum by the deceased contributor's modeled entitlement proportion and still needs Retraite Quebec combined-benefit detail.`,
+  );
+
+  return annualBenefit;
+}
+
 function estimateOtherPlannedIncome(
   member: HouseholdMemberInput,
   age: number,
@@ -2746,6 +2914,27 @@ function resolveMonthlyBenefitAt65(
     );
   }
 
+  if (
+    benefits.cppQppEstimateMode === "manual-at-start-age" &&
+    benefits.manualMonthlyPensionAtStartAge !== undefined
+  ) {
+    if (benefits.pensionStartAge === 65) {
+      return benefits.manualMonthlyPensionAtStartAge;
+    }
+
+    return member.profile.pensionPlan === "QPP"
+      ? reverseQppStartAgeAdjustment(
+          benefits.manualMonthlyPensionAtStartAge,
+          benefits.pensionStartAge,
+          context.rules,
+        )
+      : reverseCppStartAgeAdjustment(
+          benefits.manualMonthlyPensionAtStartAge,
+          benefits.pensionStartAge,
+          context.rules,
+        );
+  }
+
   return 0;
 }
 
@@ -2772,6 +2961,31 @@ function applyQppStartAgeAdjustment(
   }
 
   return monthlyAmountAt65;
+}
+
+function reverseQppStartAgeAdjustment(
+  monthlyAmountAtStartAge: number,
+  pensionStartAge: number,
+  rules: CanadaRuleSet,
+): number {
+  const monthsFrom65 = Math.round((pensionStartAge - 65) * 12);
+
+  if (monthsFrom65 < 0) {
+    const reductionRatePerMonth = resolveQppReductionPerMonth(
+      monthlyAmountAtStartAge,
+      rules,
+    );
+
+    return monthlyAmountAtStartAge / (1 - Math.abs(monthsFrom65) * reductionRatePerMonth);
+  }
+
+  if (monthsFrom65 > 0) {
+    const delayedMonths = Math.min(monthsFrom65, (72 - 65) * 12);
+
+    return monthlyAmountAtStartAge / (1 + delayedMonths * rules.qpp.increasePerMonthAfter65);
+  }
+
+  return monthlyAmountAtStartAge;
 }
 
 function resolveQppReductionPerMonth(
@@ -2813,6 +3027,27 @@ function applyCppStartAgeAdjustment(
   }
 
   return monthlyAmountAt65;
+}
+
+function reverseCppStartAgeAdjustment(
+  monthlyAmountAtStartAge: number,
+  pensionStartAge: number,
+  rules: CanadaRuleSet,
+): number {
+  const monthsFrom65 = Math.round((pensionStartAge - 65) * 12);
+
+  if (monthsFrom65 < 0) {
+    return (
+      monthlyAmountAtStartAge /
+      (1 - Math.abs(monthsFrom65) * rules.cpp.reductionPerMonthBefore65)
+    );
+  }
+
+  if (monthsFrom65 > 0) {
+    return monthlyAmountAtStartAge / (1 + monthsFrom65 * rules.cpp.increasePerMonthAfter65);
+  }
+
+  return monthlyAmountAtStartAge;
 }
 
 function applyOasStartAgeAdjustment(
@@ -3000,7 +3235,7 @@ function buildYearWarnings(
     memberFrames.filter((frame) => frame.isAlive).length === 1
   ) {
     warnings.push(
-      "Survivor years currently use baseline spousal rollover and DB continuation only; CPP survivor pension, estate taxes, and probate effects are not yet modeled.",
+      "Survivor years currently use baseline spousal rollover, DB continuation, and partial CPP/QPP survivor-pension support. Estate taxes, probate effects, and full combined-benefit math are still incomplete.",
     );
   }
 
@@ -3141,6 +3376,7 @@ function buildAssumptionList(context: NormalizedContext): string[] {
     "QPP delayed-start increases are now baseline-supported through age 72, while early-start QPP reductions use a set-proportion approximation unless a manual start-age amount is provided.",
     "Immigrant and partial-benefit support is modeled through statement, manual, residence-year, and foreign-pension inputs.",
     "GIS / Allowance now use a baseline current-year income proxy with a work-income exemption and published annual cutoffs, but exact prior-year Service Canada reassessment timing and quarterly SG3-3 tables are not yet replicated.",
+    "Survivor years now include baseline CPP/QPP survivor-pension support when the surviving spouse is not already on a combined public-pension path or when a manual annual survivor-benefit override is supplied, but full Service Canada / Retraite Quebec combined-benefit math remains incomplete.",
   ];
 }
 

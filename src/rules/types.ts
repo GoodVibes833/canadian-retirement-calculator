@@ -14,6 +14,10 @@ export interface CppRuleSet {
   reductionPerMonthBefore65: number;
   increasePerMonthAfter65: number;
   maxMonthlyRetirementAt65: number;
+  combinedRetirementSurvivorMaximumMonthlyAt65: number;
+  survivorMaximumMonthlyUnder65: number;
+  survivorMaximumMonthlyAge65Plus: number;
+  survivorUnder65FlatRateMonthly: number;
   ybe: number;
   ympe: number;
   yampe: number;
@@ -30,6 +34,11 @@ export interface QppRuleSet {
   reductionPerMonthBefore65Max: number;
   increasePerMonthAfter65: number;
   maxMonthlyRetirementAt65: number;
+  survivorMaximumMonthlyUnder45NoChildren: number;
+  survivorMaximumMonthlyUnder45WithChildren: number;
+  survivorMaximumMonthlyUnder45Disabled: number;
+  survivorMaximumMonthly45To64: number;
+  survivorMaximumMonthlyAge65PlusNoRetirement: number;
   notes: string[];
 }
 

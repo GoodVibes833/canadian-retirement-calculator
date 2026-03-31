@@ -33,6 +33,11 @@
       "accessedOn": "2026-03-31"
     },
     {
+      "label": "Government of Canada - CPP survivor's pension",
+      "url": "https://www.canada.ca/en/services/benefits/publicpensions/cpp/cpp-survivor-pension.html",
+      "accessedOn": "2026-03-31"
+    },
+    {
       "label": "CRA - TFSA contribution room",
       "url": "https://www.canada.ca/en/revenue-agency/services/tax/individuals/topics/tax-free-savings-account/contributing/calculate-room.html",
       "accessedOn": "2026-03-30"
@@ -51,6 +56,11 @@
       "label": "Retraite Quebec - Calculation of Your Retirement Pension Under the Quebec Pension Plan",
       "url": "https://www.rrq.gouv.qc.ca/en/retraite/rrq/calcul_rente/Pages/calcul_rente.aspx",
       "accessedOn": "2026-03-30"
+    },
+    {
+      "label": "Retraite Quebec - Survivor's pension",
+      "url": "https://www.rrq.gouv.qc.ca/fr/enfants/deces/deces_parent/Pages/rente_conjoint_survivant.aspx",
+      "accessedOn": "2026-03-31"
     },
     {
       "label": "Retraite Quebec - Modifications aux FRV a compter de 2025",
@@ -136,6 +146,10 @@
     "reductionPerMonthBefore65": 0.006,
     "increasePerMonthAfter65": 0.007,
     "maxMonthlyRetirementAt65": 1507.65,
+    "combinedRetirementSurvivorMaximumMonthlyAt65": 1531.56,
+    "survivorMaximumMonthlyUnder65": 803.54,
+    "survivorMaximumMonthlyAge65Plus": 904.59,
+    "survivorUnder65FlatRateMonthly": 238.17,
     "ybe": 3500,
     "ympe": 74600,
     "yampe": 85000,
@@ -154,10 +168,16 @@
     "reductionPerMonthBefore65Max": 0.006,
     "increasePerMonthAfter65": 0.007,
     "maxMonthlyRetirementAt65": 1508,
+    "survivorMaximumMonthlyUnder45NoChildren": 719.5,
+    "survivorMaximumMonthlyUnder45WithChildren": 1129.95,
+    "survivorMaximumMonthlyUnder45Disabled": 1134.61,
+    "survivorMaximumMonthly45To64": 1173.58,
+    "survivorMaximumMonthlyAge65PlusNoRetirement": 881.48,
     "notes": [
       "QPP start and delayed-retirement rules differ from CPP and must be modeled separately.",
       "Delayed retirement increases can continue to age 72.",
-      "For start ages before 65, the monthly reduction factor ranges from 0.5% to 0.6% depending on the pension's proportion of the maximum at age 65."
+      "For start ages before 65, the monthly reduction factor ranges from 0.5% to 0.6% depending on the pension's proportion of the maximum at age 65.",
+      "QPP survivor pension maximums vary by survivor age, disability status, dependent children, and whether the survivor already receives a retirement pension."
     ]
   },
   "oas": {

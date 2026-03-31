@@ -1104,6 +1104,66 @@ const taxChecks = [
       );
     },
   },
+  {
+    id: "T32",
+    label: "Under-65 CPP survivor pension is added when the survivor has no own CPP retirement pension",
+    check() {
+      const enabledInput = readJson("data/fixtures/golden/golden-on-couple-core.json");
+      const disabledInput = readJson("data/fixtures/golden/golden-on-couple-core.json");
+      enabledInput.household.partner.profile.lifeExpectancy = 55;
+      disabledInput.household.partner.profile.lifeExpectancy = 55;
+      disabledInput.household.primary.publicBenefits.survivorBenefitEstimateMode =
+        "disabled";
+
+      const enabledResult = simulateRetirementPlan(enabledInput, rules);
+      const disabledResult = simulateRetirementPlan(disabledInput, rules);
+      const enabledYear = enabledResult.years[0];
+      const disabledYear = disabledResult.years[0];
+
+      assert(
+        Math.abs(
+          enabledYear.otherPlannedIncome - disabledYear.otherPlannedIncome - 6863.04,
+        ) < 0.01,
+        "Under-65 survivor scenario should add the baseline CPP flat-rate-plus-37.5% survivor pension when the surviving spouse is not yet receiving CPP retirement.",
+      );
+      assert(
+        enabledYear.warnings.some((warning) =>
+          warning.includes("CPP survivor pension"),
+        ),
+        "Under-65 survivor scenario should surface a CPP survivor-pension warning.",
+      );
+    },
+  },
+  {
+    id: "T33",
+    label: "Age-65-plus CPP survivor pension uses the combined maximum baseline cap",
+    check() {
+      const enabledInput = readJson("data/fixtures/golden/golden-on-rrif-couple.json");
+      const disabledInput = readJson("data/fixtures/golden/golden-on-rrif-couple.json");
+      enabledInput.household.primary.profile.lifeExpectancy = 71;
+      disabledInput.household.primary.profile.lifeExpectancy = 71;
+      disabledInput.household.partner.publicBenefits.survivorBenefitEstimateMode =
+        "disabled";
+
+      const enabledResult = simulateRetirementPlan(enabledInput, rules);
+      const disabledResult = simulateRetirementPlan(disabledInput, rules);
+      const enabledYear = enabledResult.years[0];
+      const disabledYear = disabledResult.years[0];
+
+      assert(
+        Math.abs(
+          enabledYear.otherPlannedIncome - disabledYear.otherPlannedIncome - 8058.72,
+        ) < 0.01,
+        "Age-65-plus survivor scenario should add the capped CPP survivor pension increment above the survivor's own CPP retirement income.",
+      );
+      assert(
+        enabledYear.warnings.some((warning) =>
+          warning.includes("combined maximum"),
+        ),
+        "Age-65-plus combined-benefit survivor scenario should warn that the published combined maximum is being used as a baseline cap.",
+      );
+    },
+  },
 ];
 
 for (const check of taxChecks) {
