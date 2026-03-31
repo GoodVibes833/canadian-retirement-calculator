@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState, type ChangeEvent } from "react";
 import { simulateRetirementPlan } from "../index.js";
 import type {
   HouseholdMemberInput,
@@ -69,6 +69,23 @@ type SavedScenarioRecord = {
   scenario: EditableScenario;
 };
 
+type ValidationIssue = {
+  level: "error" | "warning";
+  message: string;
+};
+
+type TransferStatus = {
+  tone: "success" | "error";
+  message: string;
+};
+
+type ScenarioTransferEnvelope = {
+  version: "retirement-ui-scenario-v1";
+  exportedAt: string;
+  presetId: string;
+  scenario: EditableScenario;
+};
+
 type IntakeStepId = "setup" | "people" | "strategy" | "review";
 
 const provinceOptions: ProvinceCode[] = ["ON", "BC", "AB", "QC"];
@@ -113,12 +130,14 @@ const intakeSteps: Array<{
 const canadaRuleSet = canadaRules as CanadaRuleSet;
 const savedScenarioStorageKey =
   "canadian-retirement-calculator.saved-ui-scenarios";
+const scenarioTransferVersion = "retirement-ui-scenario-v1";
 const fallbackPartnerTemplate = deepClone(
   defaultUiPreset.input.household.partner ?? defaultUiPreset.input.household.primary,
 );
 const initialScenario = createEditableScenario(defaultUiPreset);
 
 export function App() {
+  const importInputRef = useRef<HTMLInputElement | null>(null);
   const [selectedPresetId, setSelectedPresetId] = useState(defaultUiPreset.id);
   const [scenario, setScenario] = useState<EditableScenario>(initialScenario);
   const [runState, setRunState] = useState<RunState>(() =>
@@ -129,6 +148,7 @@ export function App() {
     () => readSavedScenarios(),
   );
   const [lastLoadedSavedId, setLastLoadedSavedId] = useState<string | null>(null);
+  const [transferStatus, setTransferStatus] = useState<TransferStatus | null>(null);
 
   const selectedPreset =
     uiPresets.find((preset) => preset.id === selectedPresetId) ?? defaultUiPreset;
@@ -136,6 +156,9 @@ export function App() {
     scenario.householdType === "single"
       ? null
       : scenario.partner ?? createDefaultPartnerEditable(scenario.province);
+  const validationIssues = validateScenario(scenario, partnerScenario);
+  const blockingIssues = validationIssues.filter((issue) => issue.level === "error");
+  const advisoryIssues = validationIssues.filter((issue) => issue.level === "warning");
   const firstYear = runState.result.years[0];
   const previewYears = runState.result.years.slice(0, 10);
   const chartYears = runState.result.years.slice(0, 18);
@@ -209,8 +232,26 @@ export function App() {
       ),
     },
   ];
+  const gapChartSeries = [
+    {
+      label: "Gap / Surplus",
+      color: "#a05332",
+      values: chartYears.map((year) => year.shortfallOrSurplus),
+    },
+  ];
   const reviewFacts = buildReviewFacts(scenario, runState.result);
+  const outcomeNarrative = buildOutcomeNarrative(
+    runState.result,
+    firstYear,
+    topWarnings,
+  );
   const currentStepIndex = intakeSteps.findIndex((step) => step.id === activeStep);
+  const calculationHint =
+    blockingIssues.length > 0
+      ? `Resolve ${blockingIssues.length} blocking issue${
+          blockingIssues.length === 1 ? "" : "s"
+        } before running the engine.`
+      : "Runs the existing 2026 Canada rules snapshot and the same pure engine already passing the Golden regression set.";
 
   const handlePresetSelect = (preset: UiPreset) => {
     const nextScenario = createEditableScenario(preset);
@@ -218,6 +259,7 @@ export function App() {
     setScenario(nextScenario);
     setRunState(buildRunState(preset, nextScenario));
     setLastLoadedSavedId(null);
+    setTransferStatus(null);
     setActiveStep("setup");
   };
 
@@ -226,10 +268,22 @@ export function App() {
     setScenario(resetScenario);
     setRunState(buildRunState(selectedPreset, resetScenario));
     setLastLoadedSavedId(null);
+    setTransferStatus(null);
   };
 
   const handleCalculate = () => {
+    if (blockingIssues.length > 0) {
+      setTransferStatus({
+        tone: "error",
+        message: `Fix ${blockingIssues.length} blocking issue${
+          blockingIssues.length === 1 ? "" : "s"
+        } before calculating.`,
+      });
+      return;
+    }
+
     setRunState(buildRunState(selectedPreset, scenario));
+    setTransferStatus(null);
   };
 
   const handleSaveScenario = () => {
@@ -248,6 +302,10 @@ export function App() {
     setSavedScenarios(nextSavedScenarios);
     writeSavedScenarios(nextSavedScenarios);
     setLastLoadedSavedId(snapshot.id);
+    setTransferStatus({
+      tone: "success",
+      message: `Saved snapshot "${snapshot.label}".`,
+    });
   };
 
   const handleLoadSavedScenario = (savedScenario: SavedScenarioRecord) => {
@@ -259,6 +317,10 @@ export function App() {
     setScenario(nextScenario);
     setRunState(buildRunState(preset, nextScenario));
     setLastLoadedSavedId(savedScenario.id);
+    setTransferStatus({
+      tone: "success",
+      message: `Loaded saved scenario "${savedScenario.label}".`,
+    });
     setActiveStep("review");
   };
 
@@ -270,6 +332,85 @@ export function App() {
     writeSavedScenarios(nextSavedScenarios);
     if (lastLoadedSavedId === savedScenarioId) {
       setLastLoadedSavedId(null);
+    }
+    setTransferStatus({
+      tone: "success",
+      message: "Deleted saved scenario snapshot.",
+    });
+  };
+
+  const handleExportScenario = () => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const envelope: ScenarioTransferEnvelope = {
+      version: scenarioTransferVersion,
+      exportedAt: new Date().toISOString(),
+      presetId: selectedPreset.id,
+      scenario: deepClone({
+        ...scenario,
+        presetId: selectedPreset.id,
+        partner: partnerScenario ? deepClone(partnerScenario) : null,
+      }),
+    };
+    const blob = new Blob([JSON.stringify(envelope, null, 2)], {
+      type: "application/json",
+    });
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${slugifyFileName(scenario.title || selectedPreset.label)}.json`;
+    anchor.click();
+    window.URL.revokeObjectURL(url);
+    setTransferStatus({
+      tone: "success",
+      message: "Exported current scenario to JSON.",
+    });
+  };
+
+  const handleImportButtonClick = () => {
+    importInputRef.current?.click();
+  };
+
+  const handleImportFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) {
+      return;
+    }
+
+    void importScenarioFile(file);
+  };
+
+  const importScenarioFile = async (file: File) => {
+    try {
+      const raw = await file.text();
+      const envelope = parseScenarioTransferEnvelope(raw);
+      const preset =
+        uiPresets.find((candidate) => candidate.id === envelope.presetId) ??
+        defaultUiPreset;
+      const normalizedScenario = normalizeImportedScenario(
+        envelope.scenario,
+        preset,
+      );
+      setSelectedPresetId(preset.id);
+      setScenario(normalizedScenario);
+      setRunState(buildRunState(preset, normalizedScenario));
+      setLastLoadedSavedId(null);
+      setTransferStatus({
+        tone: "success",
+        message: `Imported scenario "${normalizedScenario.title}".`,
+      });
+      setActiveStep("review");
+    } catch (error) {
+      setTransferStatus({
+        tone: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Could not import that scenario file.",
+      });
     }
   };
 
@@ -619,18 +760,52 @@ export function App() {
                     <p className="section-kicker">Review</p>
                     <h3>Scenario Snapshot</h3>
                   </div>
-                  <button
-                    className="ghost-button"
-                    type="button"
-                    onClick={handleSaveScenario}
-                  >
-                    Save Snapshot
-                  </button>
+                  <div className="saved-actions">
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      onClick={handleSaveScenario}
+                    >
+                      Save Snapshot
+                    </button>
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      onClick={handleExportScenario}
+                    >
+                      Export JSON
+                    </button>
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      onClick={handleImportButtonClick}
+                    >
+                      Import JSON
+                    </button>
+                    <input
+                      ref={importInputRef}
+                      className="visually-hidden"
+                      type="file"
+                      accept="application/json,.json"
+                      onChange={handleImportFileChange}
+                    />
+                  </div>
                 </div>
                 <p className="section-note">
                   Save custom cases here so you can jump back into them without
                   rebuilding the whole form.
                 </p>
+                {transferStatus ? (
+                  <p
+                    className={
+                      transferStatus.tone === "success"
+                        ? "status-banner status-banner-success"
+                        : "status-banner status-banner-error"
+                    }
+                  >
+                    {transferStatus.message}
+                  </p>
+                ) : null}
                 {savedScenarioLabel ? (
                   <p className="section-note">
                     Last loaded snapshot: <strong>{savedScenarioLabel}</strong>
@@ -693,6 +868,44 @@ export function App() {
             </>
           ) : null}
 
+          <section className="member-card">
+            <div className="member-header">
+              <h3>Validation</h3>
+            </div>
+            <p className="section-note">
+              Blocking issues stop the run. Warnings are advisory and help you
+              spot assumptions that deserve a second look.
+            </p>
+            <div className="validation-summary">
+              <article className="review-card">
+                <span>Blocking</span>
+                <strong>{String(blockingIssues.length)}</strong>
+              </article>
+              <article className="review-card">
+                <span>Warnings</span>
+                <strong>{String(advisoryIssues.length)}</strong>
+              </article>
+            </div>
+            {blockingIssues.length > 0 ? (
+              <ul className="validation-list validation-list-error">
+                {blockingIssues.map((issue) => (
+                  <li key={`error-${issue.message}`}>{issue.message}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="status-banner status-banner-success">
+                No blocking issues in the current scenario.
+              </p>
+            )}
+            {advisoryIssues.length > 0 ? (
+              <ul className="validation-list validation-list-warning">
+                {advisoryIssues.map((issue) => (
+                  <li key={`warning-${issue.message}`}>{issue.message}</li>
+                ))}
+              </ul>
+            ) : null}
+          </section>
+
           <div className="step-footer">
             <div className="step-footer-actions">
               <button
@@ -717,14 +930,14 @@ export function App() {
                 className="primary-button"
                 type="button"
                 onClick={handleCalculate}
+                disabled={blockingIssues.length > 0}
               >
                 Calculate Plan
               </button>
             </div>
           </div>
           <p className="action-hint">
-            Runs the existing 2026 Canada rules snapshot and the same pure
-            engine already passing the Golden regression set.
+            {calculationHint}
           </p>
         </section>
 
@@ -785,6 +998,28 @@ export function App() {
                 labels={chartYears.map((year) => String(year.calendarYear))}
                 series={balanceChartSeries}
               />
+            </section>
+
+            <section className="results-card results-card-wide">
+              <TrendChart
+                title="Gap Monitor"
+                subtitle="Positive values mean surplus. Negative values mean the plan is falling short."
+                labels={chartYears.map((year) => String(year.calendarYear))}
+                series={gapChartSeries}
+              />
+            </section>
+
+            <section className="results-card">
+              <h3>What This Run Says</h3>
+              <p className="card-copy">
+                A short interpretation layer so the output reads more like a
+                planning conversation than a raw spreadsheet.
+              </p>
+              <ul className="warning-list narrative-list">
+                {outcomeNarrative.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
             </section>
 
             <section className="results-card">
@@ -1248,6 +1483,12 @@ function TrendChart(props: {
   const minimumValue = Math.min(0, ...allValues);
   const maximumValue = Math.max(...allValues, 1);
   const range = maximumValue - minimumValue || 1;
+  const zeroLineY =
+    minimumValue <= 0 && maximumValue >= 0
+      ? height -
+        paddingY -
+        ((0 - minimumValue) / range) * (height - paddingY * 2)
+      : null;
 
   if (props.labels.length < 2) {
     return (
@@ -1303,6 +1544,15 @@ function TrendChart(props: {
           y2={height - paddingY}
           className="chart-axis"
         />
+        {zeroLineY !== null ? (
+          <line
+            x1={paddingX}
+            y1={zeroLineY}
+            x2={width - paddingX}
+            y2={zeroLineY}
+            className="chart-zero-line"
+          />
+        ) : null}
         {props.series.map((entry) => (
           <polyline
             key={entry.label}
@@ -1555,6 +1805,40 @@ function buildReviewFacts(
   ];
 }
 
+function buildOutcomeNarrative(
+  result: SimulationResult,
+  firstYear: ProjectionYear | undefined,
+  topWarnings: string[],
+): string[] {
+  const readinessLine =
+    result.summary.initialReadiness === "on-track"
+      ? "The first pass looks on track, which means the baseline assumptions fund the modeled lifestyle."
+      : result.summary.initialReadiness === "borderline"
+        ? "This plan is close, but it has a thinner margin than a comfortable retirement plan usually wants."
+        : "This run projects a meaningful retirement funding gap under the current assumptions.";
+  const gapLine = result.summary.firstShortfallYear
+    ? `The first projected shortfall appears in ${result.summary.firstShortfallYear}, so that is the first year worth stress-testing.`
+    : "The first decade stays funded without a modeled shortfall.";
+  const benefitsLine = firstYear
+    ? `Public benefits cover about ${formatPercent(
+        safeDivide(
+          firstYear.cppQppIncome +
+            firstYear.oasIncome +
+            firstYear.gisIncome +
+            firstYear.allowanceIncome +
+            firstYear.allowanceSurvivorIncome,
+          Math.max(1, firstYear.spending),
+        ),
+      )} of first-year spending.`
+    : "Public-benefit coverage is not available yet because there is no first-year projection row.";
+  const warningLine =
+    topWarnings.length > 0
+      ? `Top warning to review next: ${topWarnings[0]}`
+      : "The engine did not surface a major first-pass warning in the current scenario.";
+
+  return [readinessLine, gapLine, benefitsLine, warningLine];
+}
+
 function totalHouseholdBalance(year: ProjectionYear): number {
   return (
     sumRecordValues(year.endOfYearAccountBalances.primary) +
@@ -1582,6 +1866,279 @@ function clampPercent(value: number): number {
   }
 
   return Math.min(1, Math.max(0, value / 100));
+}
+
+function validateScenario(
+  scenario: EditableScenario,
+  partnerScenario: EditableMember | null,
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+
+  if (!scenario.title.trim()) {
+    issues.push({
+      level: "warning",
+      message: "Scenario title is blank, so exports and saved snapshots will be harder to recognize.",
+    });
+  }
+
+  if (scenario.desiredAfterTaxSpending <= 0) {
+    issues.push({
+      level: "error",
+      message: "Desired after-tax spending needs to be greater than zero.",
+    });
+  }
+
+  if (scenario.householdType !== "single" && !partnerScenario) {
+    issues.push({
+      level: "error",
+      message: "Married and common-law scenarios need a partner profile before the run is reliable.",
+    });
+  }
+
+  if (
+    scenario.householdType !== "single" &&
+    (scenario.survivorSpendingPercent < 0 || scenario.survivorSpendingPercent > 100)
+  ) {
+    issues.push({
+      level: "error",
+      message: "Survivor spending must stay between 0% and 100% of the couple spending level.",
+    });
+  }
+
+  if (scenario.householdType === "single" && scenario.pensionIncomeSplittingEnabled) {
+    issues.push({
+      level: "warning",
+      message: "Pension income splitting is enabled, but this scenario is currently modeled as single.",
+    });
+  }
+
+  if (scenario.gisModelingEnabled && scenario.desiredAfterTaxSpending > 70000) {
+    issues.push({
+      level: "warning",
+      message: "GIS modeling is turned on, but the spending target is high enough that GIS will often stay irrelevant.",
+    });
+  }
+
+  issues.push(...validateMember("Primary", scenario.primary, scenario.province));
+
+  if (partnerScenario) {
+    issues.push(...validateMember("Partner", partnerScenario, scenario.province));
+  }
+
+  return issues;
+}
+
+function validateMember(
+  label: string,
+  member: EditableMember,
+  province: ProvinceCode,
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  const pensionStartMax = member.pensionPlan === "QPP" ? 72 : 70;
+
+  if (member.age < 18) {
+    issues.push({
+      level: "error",
+      message: `${label} age must be at least 18.`,
+    });
+  }
+
+  if (member.lifeExpectancy <= member.age) {
+    issues.push({
+      level: "error",
+      message: `${label} life expectancy needs to be greater than current age.`,
+    });
+  }
+
+  if (member.employmentIncome < 0) {
+    issues.push({
+      level: "error",
+      message: `${label} employment income cannot be negative.`,
+    });
+  }
+
+  if (member.cppMonthly < 0) {
+    issues.push({
+      level: "error",
+      message: `${label} CPP / QPP monthly estimate cannot be negative.`,
+    });
+  }
+
+  if (member.cppStartAge < 60 || member.cppStartAge > pensionStartMax) {
+    issues.push({
+      level: "error",
+      message: `${label} ${member.pensionPlan} start age must stay between 60 and ${pensionStartMax}.`,
+    });
+  }
+
+  if (member.oasStartAge < 65 || member.oasStartAge > 70) {
+    issues.push({
+      level: "error",
+      message: `${label} OAS start age must stay between 65 and 70.`,
+    });
+  }
+
+  if (member.oasResidenceYears < 0 || member.oasResidenceYears > 40) {
+    issues.push({
+      level: "error",
+      message: `${label} OAS residence years must stay between 0 and 40.`,
+    });
+  }
+
+  if (member.oasEligible && member.oasResidenceYears < 10) {
+    issues.push({
+      level: "warning",
+      message: `${label} has fewer than 10 residence years entered, which often means OAS will depend on treaty rules or be unavailable.`,
+    });
+  }
+
+  if (province === "QC" && member.pensionPlan !== "QPP") {
+    issues.push({
+      level: "warning",
+      message: `${label} is in Quebec, so QPP is usually the more realistic public pension path.`,
+    });
+  }
+
+  if (province !== "QC" && member.pensionPlan === "QPP") {
+    issues.push({
+      level: "warning",
+      message: `${label} is outside Quebec, so CPP is usually the more realistic public pension path.`,
+    });
+  }
+
+  for (const [accountLabel, value] of Object.entries(member.balances)) {
+    if (value < 0) {
+      issues.push({
+        level: "error",
+        message: `${label} ${accountLabel} balance cannot be negative.`,
+      });
+    }
+  }
+
+  if (member.rentalIncome < 0 || member.foreignPensionIncome < 0) {
+    issues.push({
+      level: "error",
+      message: `${label} recurring outside income entries cannot be negative.`,
+    });
+  }
+
+  if (member.retirementAge < 45 || member.retirementAge > 80) {
+    issues.push({
+      level: "warning",
+      message: `${label} retirement age is outside the typical 45-80 planning band, so double-check the intent.`,
+    });
+  }
+
+  return issues;
+}
+
+function parseScenarioTransferEnvelope(raw: string): ScenarioTransferEnvelope {
+  const parsed = JSON.parse(raw) as Partial<ScenarioTransferEnvelope>;
+
+  if (parsed.version !== scenarioTransferVersion) {
+    throw new Error("This JSON file is not a supported retirement UI scenario export.");
+  }
+
+  if (!parsed.scenario || typeof parsed.scenario !== "object") {
+    throw new Error("Imported file is missing the scenario payload.");
+  }
+
+  if (typeof parsed.presetId !== "string") {
+    throw new Error("Imported file is missing a valid preset id.");
+  }
+
+  return parsed as ScenarioTransferEnvelope;
+}
+
+function normalizeImportedScenario(
+  scenario: EditableScenario,
+  preset: UiPreset,
+): EditableScenario {
+  const fallback = createEditableScenario(preset);
+  const nextHouseholdType = householdTypeOptions.includes(scenario.householdType)
+    ? scenario.householdType
+    : fallback.householdType;
+  const nextProvince = provinceOptions.includes(scenario.province)
+    ? scenario.province
+    : fallback.province;
+  const fallbackPartner =
+    fallback.partner ?? createDefaultPartnerEditable(nextProvince);
+
+  return {
+    presetId: typeof scenario.presetId === "string" ? scenario.presetId : preset.id,
+    title:
+      typeof scenario.title === "string" && scenario.title.trim()
+        ? scenario.title
+        : fallback.title,
+    householdType: nextHouseholdType,
+    province: nextProvince,
+    withdrawalOrder: withdrawalOrderOptions.some(
+      (option) => option.value === scenario.withdrawalOrder,
+    )
+      ? scenario.withdrawalOrder
+      : fallback.withdrawalOrder,
+    pensionIncomeSplittingEnabled: Boolean(scenario.pensionIncomeSplittingEnabled),
+    oasClawbackAwareMode: Boolean(scenario.oasClawbackAwareMode),
+    gisModelingEnabled: Boolean(scenario.gisModelingEnabled),
+    desiredAfterTaxSpending: safeNumber(
+      scenario.desiredAfterTaxSpending,
+      fallback.desiredAfterTaxSpending,
+    ),
+    survivorSpendingPercent: safeNumber(
+      scenario.survivorSpendingPercent,
+      fallback.survivorSpendingPercent,
+    ),
+    primary: normalizeImportedMember(scenario.primary, fallback.primary),
+    partner:
+      nextHouseholdType === "single"
+        ? null
+        : normalizeImportedMember(scenario.partner ?? fallbackPartner, fallbackPartner),
+  };
+}
+
+function normalizeImportedMember(
+  member: EditableMember,
+  fallback: EditableMember,
+): EditableMember {
+  return {
+    age: safeNumber(member?.age, fallback.age),
+    retirementAge: safeNumber(member?.retirementAge, fallback.retirementAge),
+    lifeExpectancy: safeNumber(member?.lifeExpectancy, fallback.lifeExpectancy),
+    pensionPlan: pensionPlanOptions.includes(member?.pensionPlan)
+      ? member.pensionPlan
+      : fallback.pensionPlan,
+    employmentIncome: safeNumber(
+      member?.employmentIncome,
+      fallback.employmentIncome,
+    ),
+    cppMonthly: safeNumber(member?.cppMonthly, fallback.cppMonthly),
+    cppStartAge: safeNumber(member?.cppStartAge, fallback.cppStartAge),
+    oasStartAge: safeNumber(member?.oasStartAge, fallback.oasStartAge),
+    oasResidenceYears: safeNumber(
+      member?.oasResidenceYears,
+      fallback.oasResidenceYears,
+    ),
+    oasEligible:
+      typeof member?.oasEligible === "boolean"
+        ? member.oasEligible
+        : fallback.oasEligible,
+    rentalIncome: safeNumber(member?.rentalIncome, fallback.rentalIncome),
+    foreignPensionIncome: safeNumber(
+      member?.foreignPensionIncome,
+      fallback.foreignPensionIncome,
+    ),
+    balances: {
+      rrsp: safeNumber(member?.balances?.rrsp, fallback.balances.rrsp),
+      rrif: safeNumber(member?.balances?.rrif, fallback.balances.rrif),
+      tfsa: safeNumber(member?.balances?.tfsa, fallback.balances.tfsa),
+      nonRegistered: safeNumber(
+        member?.balances?.nonRegistered,
+        fallback.balances.nonRegistered,
+      ),
+      cash: safeNumber(member?.balances?.cash, fallback.balances.cash),
+      lif: safeNumber(member?.balances?.lif, fallback.balances.lif),
+    },
+  };
 }
 
 function readSavedScenarios(): SavedScenarioRecord[] {
@@ -1617,6 +2174,16 @@ function createScenarioSnapshotId() {
   return `saved-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function slugifyFileName(value: string) {
+  const slug = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return slug || "retirement-scenario";
+}
+
 function formatSavedAt(value: string): string {
   return new Intl.DateTimeFormat("en-CA", {
     dateStyle: "medium",
@@ -1631,6 +2198,25 @@ function deepClone<T>(value: T): T {
 function readNumber(value: string): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function safeNumber(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function safeDivide(numerator: number, denominator: number): number {
+  if (denominator === 0) {
+    return 0;
+  }
+
+  return numerator / denominator;
+}
+
+function formatPercent(value: number): string {
+  return new Intl.NumberFormat("en-CA", {
+    style: "percent",
+    maximumFractionDigits: 0,
+  }).format(value);
 }
 
 function formatCurrency(value: number): string {
