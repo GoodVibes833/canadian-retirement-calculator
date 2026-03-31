@@ -33,6 +33,11 @@
       "accessedOn": "2026-03-31"
     },
     {
+      "label": "Government of Canada - OAS payment amounts April to June 2026",
+      "url": "https://www.canada.ca/en/services/benefits/publicpensions/old-age-security/payments.html",
+      "accessedOn": "2026-03-31"
+    },
+    {
       "label": "Government of Canada - CPP survivor's pension",
       "url": "https://www.canada.ca/en/services/benefits/publicpensions/cpp/cpp-survivor-pension.html",
       "accessedOn": "2026-03-31"
@@ -190,11 +195,103 @@
     "monthlyMaximums": [
       {
         "ageBand": "65-74",
-        "amount": 742.31
+        "amount": 743.05
       },
       {
         "ageBand": "75+",
-        "amount": 816.54
+        "amount": 817.36
+      }
+    ],
+    "quarterlyBenefitPeriods": [
+      {
+        "periodLabel": "January to March 2026",
+        "startDate": "2026-01-01",
+        "endDate": "2026-03-31",
+        "monthlyMaximums": [
+          {
+            "ageBand": "65-74",
+            "amount": 742.31
+          },
+          {
+            "ageBand": "75+",
+            "amount": 816.54
+          }
+        ],
+        "gisMaximums": [
+          {
+            "householdCase": "single-oas",
+            "monthlyMaximum": 1108.74,
+            "incomeCutoff": 22488,
+            "topUpCutoff": 10256
+          },
+          {
+            "householdCase": "spouse-no-oas",
+            "monthlyMaximum": 1108.74,
+            "incomeCutoff": 53904,
+            "topUpCutoff": 20512
+          },
+          {
+            "householdCase": "spouse-oas",
+            "monthlyMaximum": 667.41,
+            "incomeCutoff": 29712,
+            "topUpCutoff": 8704
+          },
+          {
+            "householdCase": "spouse-allowance",
+            "monthlyMaximum": 667.41,
+            "incomeCutoff": 41616,
+            "topUpCutoff": 8704
+          }
+        ],
+        "allowanceMaximumMonthly": 1409.72,
+        "allowanceIncomeCutoff": 41616,
+        "allowanceSurvivorMaximumMonthly": 1680.47,
+        "allowanceSurvivorIncomeCutoff": 30312
+      },
+      {
+        "periodLabel": "April to June 2026",
+        "startDate": "2026-04-01",
+        "endDate": "2026-06-30",
+        "monthlyMaximums": [
+          {
+            "ageBand": "65-74",
+            "amount": 743.05
+          },
+          {
+            "ageBand": "75+",
+            "amount": 817.36
+          }
+        ],
+        "gisMaximums": [
+          {
+            "householdCase": "single-oas",
+            "monthlyMaximum": 1109.85,
+            "incomeCutoff": 22512,
+            "topUpCutoff": 10256
+          },
+          {
+            "householdCase": "spouse-no-oas",
+            "monthlyMaximum": 1109.85,
+            "incomeCutoff": 53952,
+            "topUpCutoff": 20512
+          },
+          {
+            "householdCase": "spouse-oas",
+            "monthlyMaximum": 668.08,
+            "incomeCutoff": 29760,
+            "topUpCutoff": 8704
+          },
+          {
+            "householdCase": "spouse-allowance",
+            "monthlyMaximum": 668.08,
+            "incomeCutoff": 41664,
+            "topUpCutoff": 8704
+          }
+        ],
+        "allowanceMaximumMonthly": 1411.13,
+        "allowanceIncomeCutoff": 41664,
+        "allowanceSurvivorMaximumMonthly": 1682.15,
+        "allowanceSurvivorIncomeCutoff": 30336
       }
     ],
     "recoveryPeriods": [
@@ -223,33 +320,33 @@
     "gisMaximums": [
       {
         "householdCase": "single-oas",
-        "monthlyMaximum": 1108.74,
-        "incomeCutoff": 22488,
+        "monthlyMaximum": 1109.85,
+        "incomeCutoff": 22512,
         "topUpCutoff": 10256
       },
       {
         "householdCase": "spouse-no-oas",
-        "monthlyMaximum": 1108.74,
-        "incomeCutoff": 53904,
+        "monthlyMaximum": 1109.85,
+        "incomeCutoff": 53952,
         "topUpCutoff": 20512
       },
       {
         "householdCase": "spouse-oas",
-        "monthlyMaximum": 667.41,
-        "incomeCutoff": 29712,
+        "monthlyMaximum": 668.08,
+        "incomeCutoff": 29760,
         "topUpCutoff": 8704
       },
       {
         "householdCase": "spouse-allowance",
-        "monthlyMaximum": 667.41,
-        "incomeCutoff": 41616,
+        "monthlyMaximum": 668.08,
+        "incomeCutoff": 41664,
         "topUpCutoff": 8704
       }
     ],
-    "allowanceMaximumMonthly": 1409.72,
-    "allowanceIncomeCutoff": 41616,
-    "allowanceSurvivorMaximumMonthly": 1680.47,
-    "allowanceSurvivorIncomeCutoff": 30312
+    "allowanceMaximumMonthly": 1411.13,
+    "allowanceIncomeCutoff": 41664,
+    "allowanceSurvivorMaximumMonthly": 1682.15,
+    "allowanceSurvivorIncomeCutoff": 30336
   },
   "rrif": {
     "formulaAtOrBelow70": "1 / (90 - age)",

@@ -205,11 +205,11 @@ Reason:
 
 If we keep building immediately, the best next implementation target is:
 
-1. `R09` quarterly OAS / GIS / Allowance indexation
+1. `R15` widowhood year+1 OAS / GIS / Allowance reassessment
 
 Right behind it:
 
-2. `R15` widowhood year+1 OAS / GIS / Allowance reassessment
-3. `R10` GRE 164(6) and terminal loss carryback support
+2. `R10` GRE 164(6) and terminal loss carryback support
+3. `R12` treaty-aware foreign tax credits
 
-That trio would make benefit timing, widowhood transitions, and terminal-year tax handling materially more trustworthy very quickly.
+That trio would make widowhood transitions, terminal-year tax handling, and immigrant/cross-border accuracy materially more trustworthy very quickly.

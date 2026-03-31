@@ -150,6 +150,17 @@ interface IncomeTestedBenefitProjection {
   warnings: string[];
 }
 
+interface AnnualizedOasBenefitValues {
+  monthlyMaximums: CanadaRuleSet["oas"]["monthlyMaximums"];
+  gisMaximums: CanadaRuleSet["oas"]["gisMaximums"];
+  allowanceMaximumMonthly: number;
+  allowanceIncomeCutoff: number;
+  allowanceSurvivorMaximumMonthly: number;
+  allowanceSurvivorIncomeCutoff: number;
+  usedQuarterlyBenefitPeriods: boolean;
+  usedFallbackLatestValues: boolean;
+}
+
 interface IncomeTestedBenefitAssessableIncomeState {
   calendarYear: number;
   primaryAssessableIncome: number;
@@ -778,7 +789,9 @@ function buildMemberFrames(
         isAlive && !isRetired,
       ) * yearFraction,
       cppQppIncome: estimateCppOrQppIncome(context, member, age, isAlive) * yearFraction,
-      oasIncome: estimateOasIncome(context, member, age, isAlive) * yearFraction,
+      oasIncome:
+        estimateOasIncome(context, member, age, isAlive, period.calendarYear) *
+        yearFraction,
       dbPensionIncome: estimateDbPensionIncome(member, age, isAlive) * yearFraction,
       annuityIncome,
       rentalIncome,
@@ -1487,6 +1500,7 @@ function resolveDrawdownAndIncomeTestedBenefits(
   if (context.input.household.gisModelingEnabled && hasPriorYearAssessableIncome) {
     finalBenefitProjection = estimateIncomeTestedBenefits(
       context,
+      period.calendarYear,
       memberFrames,
       baseTaxState,
       incomeTestedBenefitAssessableIncomeState,
@@ -1534,6 +1548,7 @@ function resolveDrawdownAndIncomeTestedBenefits(
       const incomeTestedBenefits = context.input.household.gisModelingEnabled
         ? estimateIncomeTestedBenefits(
             context,
+            period.calendarYear,
             memberFrames,
             workingTaxState,
             undefined,
@@ -1567,15 +1582,30 @@ function resolveDrawdownAndIncomeTestedBenefits(
 
 function estimateIncomeTestedBenefits(
   context: NormalizedContext,
+  calendarYear: number,
   memberFrames: MemberFrame[],
   memberTaxState: Partial<Record<MemberSlot, MemberTaxState>>,
   priorYearAssessableIncomeState: IncomeTestedBenefitAssessableIncomeState | undefined,
   usingCurrentYearFallback: boolean,
 ): IncomeTestedBenefitProjection {
+  const annualizedOasBenefits = resolveAnnualizedOasBenefitValues(
+    context.rules,
+    calendarYear,
+  );
   const warnings = [
-    "GIS / Allowance baseline uses a linear taper to the published annual cutoffs, not an exact quarterly SG3-3 table lookup or top-up formula.",
+    "GIS / Allowance baseline still uses a linear taper and does not fully replicate Service Canada's top-up or monthly reassessment mechanics.",
     "GIS / Allowance baseline applies the work-income exemption to modeled employment income only and does not yet capture every line-23600 adjustment.",
   ];
+  if (annualizedOasBenefits.usedQuarterlyBenefitPeriods) {
+    warnings.unshift(
+      `GIS / Allowance for ${calendarYear} is annualizing the published quarterly OAS tables across the calendar year rather than using a single flat monthly maximum.`,
+    );
+  }
+  if (annualizedOasBenefits.usedFallbackLatestValues) {
+    warnings.push(
+      `Some later quarters in ${calendarYear} were not yet loaded in the rules data, so GIS / Allowance annualization fell back to the latest published quarter for those months.`,
+    );
+  }
   if (usingCurrentYearFallback) {
     warnings.unshift(
       "GIS / Allowance first-year baseline is using a current-year income proxy because no prior-year assessable-income seed was supplied. Add household.incomeTestedBenefitsBaseIncome when you want the first projection year to reflect the actual prior tax year.",
@@ -1626,7 +1656,10 @@ function estimateIncomeTestedBenefits(
     const assessableIncome = assessableIncomeBySlot[frame.slot] ?? 0;
 
     if (frame.age >= 65 && frame.oasIncome > 0) {
-      const singleRule = findGisRule(context, "single-oas");
+      const singleRule = findAnnualizedGisRule(
+        annualizedOasBenefits,
+        "single-oas",
+      );
       gisAnnual = estimateLinearIncomeTestedBenefitAnnual(
         (singleRule?.monthlyMaximum ?? 0) * 12,
         singleRule?.incomeCutoff ?? 0,
@@ -1638,8 +1671,8 @@ function estimateIncomeTestedBenefits(
       frame.member.publicBenefits.allowanceSurvivorEligible
     ) {
       allowanceSurvivorAnnual = estimateLinearIncomeTestedBenefitAnnual(
-        context.rules.oas.allowanceSurvivorMaximumMonthly * 12,
-        context.rules.oas.allowanceSurvivorIncomeCutoff,
+        annualizedOasBenefits.allowanceSurvivorMaximumMonthly * 12,
+        annualizedOasBenefits.allowanceSurvivorIncomeCutoff,
         assessableIncome,
       );
       warnings.push(
@@ -1664,7 +1697,10 @@ function estimateIncomeTestedBenefits(
     );
 
     if (oasRecipients.length >= 2) {
-      const coupleRule = findGisRule(context, "spouse-oas");
+      const coupleRule = findAnnualizedGisRule(
+        annualizedOasBenefits,
+        "spouse-oas",
+      );
       const annualPerRecipient = estimateLinearIncomeTestedBenefitAnnual(
         (coupleRule?.monthlyMaximum ?? 0) * 12,
         coupleRule?.incomeCutoff ?? 0,
@@ -1672,19 +1708,25 @@ function estimateIncomeTestedBenefits(
       );
       gisAnnual = annualPerRecipient * oasRecipients.length;
     } else if (oasRecipients.length === 1 && spouseAllowanceEligible) {
-      const olderSpouseRule = findGisRule(context, "spouse-allowance");
+      const olderSpouseRule = findAnnualizedGisRule(
+        annualizedOasBenefits,
+        "spouse-allowance",
+      );
       gisAnnual = estimateLinearIncomeTestedBenefitAnnual(
         (olderSpouseRule?.monthlyMaximum ?? 0) * 12,
         olderSpouseRule?.incomeCutoff ?? 0,
         combinedAssessableIncome,
       );
       allowanceAnnual = estimateLinearIncomeTestedBenefitAnnual(
-        context.rules.oas.allowanceMaximumMonthly * 12,
-        context.rules.oas.allowanceIncomeCutoff,
+        annualizedOasBenefits.allowanceMaximumMonthly * 12,
+        annualizedOasBenefits.allowanceIncomeCutoff,
         combinedAssessableIncome,
       );
     } else if (oasRecipients.length === 1 && partnerWithoutOas) {
-      const spouseNoOasRule = findGisRule(context, "spouse-no-oas");
+      const spouseNoOasRule = findAnnualizedGisRule(
+        annualizedOasBenefits,
+        "spouse-no-oas",
+      );
       gisAnnual = estimateLinearIncomeTestedBenefitAnnual(
         (spouseNoOasRule?.monthlyMaximum ?? 0) * 12,
         spouseNoOasRule?.incomeCutoff ?? 0,
@@ -1794,13 +1836,211 @@ function estimateLinearIncomeTestedBenefitAnnual(
   return Math.max(0, maximumAnnual * (1 - clampRate(assessableIncome / incomeCutoff)));
 }
 
-function findGisRule(
-  context: NormalizedContext,
+function findAnnualizedGisRule(
+  annualizedOasBenefits: AnnualizedOasBenefitValues,
   householdCase: "single-oas" | "spouse-no-oas" | "spouse-oas" | "spouse-allowance",
 ) {
-  return context.rules.oas.gisMaximums.find(
+  return annualizedOasBenefits.gisMaximums.find(
     (item) => item.householdCase === householdCase,
   );
+}
+
+function resolveAnnualizedOasBenefitValues(
+  rules: CanadaRuleSet,
+  calendarYear: number,
+): AnnualizedOasBenefitValues {
+  const quarterlyPeriods = rules.oas.quarterlyBenefitPeriods ?? [];
+
+  if (quarterlyPeriods.length === 0) {
+    return {
+      monthlyMaximums: rules.oas.monthlyMaximums,
+      gisMaximums: rules.oas.gisMaximums,
+      allowanceMaximumMonthly: rules.oas.allowanceMaximumMonthly,
+      allowanceIncomeCutoff: rules.oas.allowanceIncomeCutoff,
+      allowanceSurvivorMaximumMonthly: rules.oas.allowanceSurvivorMaximumMonthly,
+      allowanceSurvivorIncomeCutoff: rules.oas.allowanceSurvivorIncomeCutoff,
+      usedQuarterlyBenefitPeriods: false,
+      usedFallbackLatestValues: false,
+    };
+  }
+
+  let usedFallbackLatestValues = false;
+  const ageBands = ["65-74", "75+"] as const;
+  const householdCases = [
+    "single-oas",
+    "spouse-no-oas",
+    "spouse-oas",
+    "spouse-allowance",
+  ] as const;
+
+  const monthlyMaximums = ageBands.map((ageBand) => ({
+    ageBand,
+    amount: averageAcrossCalendarMonths(calendarYear, (month) => {
+      const resolvedPeriod = resolveOasQuarterlyPeriodForMonth(
+        rules,
+        calendarYear,
+        month,
+      );
+      usedFallbackLatestValues ||= resolvedPeriod.usedFallbackLatestValues;
+      return (
+        resolvedPeriod.values.monthlyMaximums.find((item) => item.ageBand === ageBand)
+          ?.amount ?? 0
+      );
+    }),
+  }));
+
+  const gisMaximums = householdCases.map((householdCase) => {
+    let topUpCutoff = 0;
+    const monthlyMaximum = averageAcrossCalendarMonths(calendarYear, (month) => {
+      const resolvedPeriod = resolveOasQuarterlyPeriodForMonth(
+        rules,
+        calendarYear,
+        month,
+      );
+      usedFallbackLatestValues ||= resolvedPeriod.usedFallbackLatestValues;
+      const rule = resolvedPeriod.values.gisMaximums.find(
+        (item) => item.householdCase === householdCase,
+      );
+      if (rule) {
+        topUpCutoff = rule.topUpCutoff;
+      }
+      return rule?.monthlyMaximum ?? 0;
+    });
+    const incomeCutoff = averageAcrossCalendarMonths(calendarYear, (month) => {
+      const resolvedPeriod = resolveOasQuarterlyPeriodForMonth(
+        rules,
+        calendarYear,
+        month,
+      );
+      usedFallbackLatestValues ||= resolvedPeriod.usedFallbackLatestValues;
+      return (
+        resolvedPeriod.values.gisMaximums.find(
+          (item) => item.householdCase === householdCase,
+        )?.incomeCutoff ?? 0
+      );
+    });
+
+    return {
+      householdCase,
+      monthlyMaximum,
+      incomeCutoff,
+      topUpCutoff,
+    };
+  });
+
+  const allowanceMaximumMonthly = averageAcrossCalendarMonths(
+    calendarYear,
+    (month) => {
+      const resolvedPeriod = resolveOasQuarterlyPeriodForMonth(
+        rules,
+        calendarYear,
+        month,
+      );
+      usedFallbackLatestValues ||= resolvedPeriod.usedFallbackLatestValues;
+      return resolvedPeriod.values.allowanceMaximumMonthly;
+    },
+  );
+  const allowanceIncomeCutoff = averageAcrossCalendarMonths(
+    calendarYear,
+    (month) => {
+      const resolvedPeriod = resolveOasQuarterlyPeriodForMonth(
+        rules,
+        calendarYear,
+        month,
+      );
+      usedFallbackLatestValues ||= resolvedPeriod.usedFallbackLatestValues;
+      return resolvedPeriod.values.allowanceIncomeCutoff;
+    },
+  );
+  const allowanceSurvivorMaximumMonthly = averageAcrossCalendarMonths(
+    calendarYear,
+    (month) => {
+      const resolvedPeriod = resolveOasQuarterlyPeriodForMonth(
+        rules,
+        calendarYear,
+        month,
+      );
+      usedFallbackLatestValues ||= resolvedPeriod.usedFallbackLatestValues;
+      return resolvedPeriod.values.allowanceSurvivorMaximumMonthly;
+    },
+  );
+  const allowanceSurvivorIncomeCutoff = averageAcrossCalendarMonths(
+    calendarYear,
+    (month) => {
+      const resolvedPeriod = resolveOasQuarterlyPeriodForMonth(
+        rules,
+        calendarYear,
+        month,
+      );
+      usedFallbackLatestValues ||= resolvedPeriod.usedFallbackLatestValues;
+      return resolvedPeriod.values.allowanceSurvivorIncomeCutoff;
+    },
+  );
+
+  return {
+    monthlyMaximums,
+    gisMaximums,
+    allowanceMaximumMonthly,
+    allowanceIncomeCutoff,
+    allowanceSurvivorMaximumMonthly,
+    allowanceSurvivorIncomeCutoff,
+    usedQuarterlyBenefitPeriods: true,
+    usedFallbackLatestValues,
+  };
+}
+
+function averageAcrossCalendarMonths(
+  calendarYear: number,
+  valueForMonth: (month: number) => number,
+): number {
+  let total = 0;
+
+  for (let month = 1; month <= 12; month += 1) {
+    total += valueForMonth(month);
+  }
+
+  return total / 12;
+}
+
+function resolveOasQuarterlyPeriodForMonth(
+  rules: CanadaRuleSet,
+  calendarYear: number,
+  month: number,
+): {
+  values: Pick<
+    CanadaRuleSet["oas"],
+    | "monthlyMaximums"
+    | "gisMaximums"
+    | "allowanceMaximumMonthly"
+    | "allowanceIncomeCutoff"
+    | "allowanceSurvivorMaximumMonthly"
+    | "allowanceSurvivorIncomeCutoff"
+  >;
+  usedFallbackLatestValues: boolean;
+} {
+  const isoMonth = `${calendarYear}-${String(month).padStart(2, "0")}-01`;
+  const quarterlyPeriod = rules.oas.quarterlyBenefitPeriods?.find(
+    (period) => period.startDate <= isoMonth && period.endDate >= isoMonth,
+  );
+
+  if (quarterlyPeriod) {
+    return {
+      values: quarterlyPeriod,
+      usedFallbackLatestValues: false,
+    };
+  }
+
+  return {
+    values: {
+      monthlyMaximums: rules.oas.monthlyMaximums,
+      gisMaximums: rules.oas.gisMaximums,
+      allowanceMaximumMonthly: rules.oas.allowanceMaximumMonthly,
+      allowanceIncomeCutoff: rules.oas.allowanceIncomeCutoff,
+      allowanceSurvivorMaximumMonthly: rules.oas.allowanceSurvivorMaximumMonthly,
+      allowanceSurvivorIncomeCutoff: rules.oas.allowanceSurvivorIncomeCutoff,
+    },
+    usedFallbackLatestValues: true,
+  };
 }
 
 function estimateEligiblePensionIncome(
@@ -2720,6 +2960,7 @@ function estimateOasIncome(
   member: HouseholdMemberInput,
   age: number,
   isAlive: boolean,
+  calendarYear: number,
 ): number {
   const benefits = member.publicBenefits;
 
@@ -2734,10 +2975,16 @@ function estimateOasIncome(
     return benefits.manualOasMonthlyAtStartAge * 12;
   }
 
+  const annualizedOasBenefits = resolveAnnualizedOasBenefitValues(
+    context.rules,
+    calendarYear,
+  );
   const maximum =
     age >= 75
-      ? context.rules.oas.monthlyMaximums.find((item) => item.ageBand === "75+")
-      : context.rules.oas.monthlyMaximums.find((item) => item.ageBand === "65-74");
+      ? annualizedOasBenefits.monthlyMaximums.find((item) => item.ageBand === "75+")
+      : annualizedOasBenefits.monthlyMaximums.find(
+          (item) => item.ageBand === "65-74",
+        );
 
   if (!maximum) {
     return 0;
@@ -3703,7 +3950,7 @@ function buildYearWarnings(
 
   if (context.input.household.gisModelingEnabled) {
     warnings.push(
-      "GIS / Allowance baseline is enabled. Review low-income years carefully because Service Canada uses prior-year income and exact quarterly tables.",
+      "GIS / Allowance baseline is enabled. Review low-income years carefully because Service Canada uses prior-year income, July-to-June payment logic, and quarterly table changes that are only annualized in the current scaffold.",
     );
   }
 
@@ -4474,7 +4721,7 @@ function buildAssumptionList(context: NormalizedContext): string[] {
     "Pension splitting currently uses an annual household heuristic on planned eligible pension income before discretionary registered drawdown.",
     "QPP delayed-start increases are now baseline-supported through age 72, while early-start QPP reductions use a set-proportion approximation unless a manual start-age amount is provided.",
     "Immigrant and partial-benefit support is modeled through statement, manual, residence-year, and foreign-pension inputs.",
-    "GIS / Allowance now use a baseline prior-year assessable-income path with a work-income exemption and published annual cutoffs. The first projection year falls back to a current-year proxy unless household.incomeTestedBenefitsBaseIncome is supplied, and exact Service Canada reassessment timing plus quarterly SG3-3 tables are not yet replicated.",
+    "GIS / Allowance now use a baseline prior-year assessable-income path with a work-income exemption and annualized quarterly OAS tables when published. The first projection year falls back to a current-year proxy unless household.incomeTestedBenefitsBaseIncome is supplied, while exact July-to-June reassessment timing and top-up mechanics are still simplified.",
     "Survivor years now include baseline CPP/QPP survivor-pension support, including capped or warning-heavy combined-benefit paths when the surviving spouse is already receiving retirement benefits, but full Service Canada / Retraite Quebec combined-benefit math remains incomplete.",
     "Survivor-year spending defaults to 72% of the couple after-tax spending target unless expenseProfile.survivorSpendingPercentOfCouple is explicitly provided.",
     "Death years use a baseline mid-year heuristic: recurring income, contributions, and mandatory RRIF/LIF withdrawals are prorated to 50%, and couple spending transitions halfway toward the survivor spending path for that year.",

@@ -66,11 +66,24 @@ export interface GisMaximum {
   topUpCutoff: number;
 }
 
+export interface OasQuarterlyBenefitPeriod {
+  periodLabel: string;
+  startDate: string;
+  endDate: string;
+  monthlyMaximums: OasMonthlyMaximum[];
+  gisMaximums: GisMaximum[];
+  allowanceMaximumMonthly: number;
+  allowanceIncomeCutoff: number;
+  allowanceSurvivorMaximumMonthly: number;
+  allowanceSurvivorIncomeCutoff: number;
+}
+
 export interface OasRuleSet {
   startAge: AgeBound;
   increasePerMonthAfter65: number;
   fullResidenceYearsAfter18: number;
   monthlyMaximums: OasMonthlyMaximum[];
+  quarterlyBenefitPeriods?: OasQuarterlyBenefitPeriod[];
   recoveryPeriods: OasRecoveryPeriod[];
   gisMaximums: GisMaximum[];
   allowanceMaximumMonthly: number;

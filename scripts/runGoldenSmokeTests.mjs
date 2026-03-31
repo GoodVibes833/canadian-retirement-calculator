@@ -1916,6 +1916,70 @@ const taxChecks = [
       );
     },
   },
+  {
+    id: "T56",
+    label: "2026 OAS annual amount uses quarterly weighting instead of a flat January maximum",
+    check() {
+      const input = readJson("data/fixtures/gis/on-single-gis.json");
+      input.household.maxProjectionAge = 65;
+
+      const result = simulateRetirementPlan(input, rules);
+      const firstYear = result.years[0];
+
+      assert(
+        Math.abs(firstYear.oasIncome - 8914.38) < 0.01,
+        "Full-year 2026 OAS should use Jan-Mar plus Apr-Dec weighted quarterly maximums for ages 65 to 74.",
+      );
+    },
+  },
+  {
+    id: "T57",
+    label: "2026 GIS annual amount uses quarterly weighting instead of a flat January maximum",
+    check() {
+      const input = readJson("data/fixtures/gis/on-single-gis.json");
+      input.household.incomeTestedBenefitsBaseIncome = {
+        primaryAssessableIncome: 0,
+        combinedAssessableIncome: 0,
+        calendarYear: 2025,
+      };
+      input.household.maxProjectionAge = 65;
+
+      const result = simulateRetirementPlan(input, rules);
+      const firstYear = result.years[0];
+
+      assert(
+        Math.abs(firstYear.gisIncome - 13314.87) < 0.01,
+        "Single GIS case should annualize the Jan-Mar and Apr-Dec 2026 quarterly maximums.",
+      );
+      assert(
+        firstYear.warnings.some((warning) =>
+          warning.includes("annualizing the published quarterly OAS tables"),
+        ),
+        "GIS quarterly annualization should surface a warning describing the annualized-quarterly baseline.",
+      );
+    },
+  },
+  {
+    id: "T58",
+    label: "2026 Allowance for the Survivor annual amount uses quarterly weighting",
+    check() {
+      const input = readJson("data/fixtures/gis/on-allowance-survivor.json");
+      input.household.incomeTestedBenefitsBaseIncome = {
+        primaryAssessableIncome: 0,
+        combinedAssessableIncome: 0,
+        calendarYear: 2025,
+      };
+      input.household.maxProjectionAge = 62;
+
+      const result = simulateRetirementPlan(input, rules);
+      const firstYear = result.years[0];
+
+      assert(
+        Math.abs(firstYear.allowanceSurvivorIncome - 20180.76) < 0.01,
+        "Allowance for the Survivor should annualize the Jan-Mar and Apr-Dec 2026 quarterly maximums.",
+      );
+    },
+  },
 ];
 
 for (const check of taxChecks) {
