@@ -1281,6 +1281,42 @@ const taxChecks = [
       );
     },
   },
+  {
+    id: "T38",
+    label: "Age-65-plus QPP combined-benefit path stays positive but below the no-retirement maximum",
+    check() {
+      const enabledInput = readJson(
+        "data/fixtures/quebec/qc-survivor-combined-benefit.json",
+      );
+      const disabledInput = readJson(
+        "data/fixtures/quebec/qc-survivor-combined-benefit.json",
+      );
+      disabledInput.household.partner.publicBenefits.survivorBenefitEstimateMode =
+        "disabled";
+
+      const enabledResult = simulateRetirementPlan(enabledInput, rules);
+      const disabledResult = simulateRetirementPlan(disabledInput, rules);
+      const enabledYear = enabledResult.years[0];
+      const disabledYear = disabledResult.years[0];
+      const survivorIncrement =
+        enabledYear.otherPlannedIncome - disabledYear.otherPlannedIncome;
+
+      assert(
+        survivorIncrement > 0,
+        "Age-65-plus Quebec combined-benefit scenario should still add a positive survivor pension increment.",
+      );
+      assert(
+        survivorIncrement < 881.48 * (1000 / 1508) * 12,
+        "Age-65-plus Quebec combined-benefit scenario should stay below the no-retirement survivor maximum for the deceased contributor's entitlement ratio.",
+      );
+      assert(
+        enabledYear.warnings.some((warning) =>
+          warning.includes("combined-benefit approximation"),
+        ),
+        "Age-65-plus Quebec combined-benefit scenario should warn that the combined-benefit path is an approximation.",
+      );
+    },
+  },
 ];
 
 for (const check of taxChecks) {

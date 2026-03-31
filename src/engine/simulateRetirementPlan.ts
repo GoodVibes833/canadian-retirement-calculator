@@ -2632,7 +2632,9 @@ function estimateQppSurvivorIncome(
     return 0;
   }
 
-  if (survivor.cppQppIncome > 0) {
+  const survivorOwnMonthlyRetirement = survivor.cppQppIncome / 12;
+
+  if (survivorOwnMonthlyRetirement > 0 && survivor.age < 65) {
     warnings.push(
       "QPP survivor pension is not automatically modeled when the survivor is already receiving a QPP retirement pension. Use a manual annual survivor-benefit input for this case.",
     );
@@ -2659,7 +2661,29 @@ function estimateQppSurvivorIncome(
     monthlyCap = context.rules.qpp.survivorMaximumMonthly45To64;
   }
 
-  const annualBenefit = monthlyCap * entitlementRatio * 12;
+  let monthlyBenefit = monthlyCap * entitlementRatio;
+
+  if (survivorOwnMonthlyRetirement > 0 && survivor.age >= 65) {
+    const survivorMaximumRetirementForCurrentStartAge = applyQppStartAgeAdjustment(
+      context.rules.qpp.maxMonthlyRetirementAt65,
+      survivor.member.publicBenefits.pensionStartAge,
+      context.rules,
+    );
+    const reductionRatio =
+      survivorMaximumRetirementForCurrentStartAge > 0
+        ? clampRate(
+            survivorOwnMonthlyRetirement /
+              survivorMaximumRetirementForCurrentStartAge,
+          )
+        : 1;
+
+    monthlyBenefit *= 1 - reductionRatio;
+    warnings.push(
+      "QPP survivor pension for a survivor already receiving QPP retirement is using a baseline combined-benefit approximation. Retraite Quebec states the survivor portion may be reduced to zero when the survivor is already receiving the maximum retirement pension for that start age, so the scaffold linearly reduces the no-retirement survivor maximum by the survivor's current-retirement-to-maximum ratio.",
+    );
+  }
+
+  const annualBenefit = monthlyBenefit * 12;
 
   warnings.push(
     `QPP survivor pension of ${roundCurrency(
